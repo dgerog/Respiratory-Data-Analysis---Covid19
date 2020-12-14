@@ -11,7 +11,7 @@ class theStudy:
         
         Class parameters:
             self.X: Actual respiratory data
-            self.F: Augemnted featires
+            self.F: Augmented features
             
         Supported methods (public):
             readTable: Get the columns of an excel/csv file
@@ -21,6 +21,15 @@ class theStudy:
     """
     
     def __init__(self):
+        #constants
+        self.STATUS_LINE           = 0
+        self.PCR_TEST_LINE         = 1
+        self.PCR_HOSPITALIZED_LINE = 2
+        self.RAPID_TEST_LINE       = 3
+        self.SMOKING_LINE          = 4
+        self.AGE_LINE              = 5
+    
+        
         #initialize properties
         self.X = []
         self.F = []
@@ -29,6 +38,9 @@ class theStudy:
         self.isNonActive = []
         self.patientRecs = []
         self.healthyRecs = []
+    
+
+    
     #
     # Public
     #
@@ -159,46 +171,78 @@ class theStudy:
         #
         # Assign patient labels
         #
-        isPatient = (F[0,:] == 'P').astype(bool)
-
-        #isActive = (isPatient == True) and (F[2,:].astype(bool) or F[3,:].astype(bool))
-        #isNonActive = (isPatient == True) and not isActive
-
+        isPatient = (F[self.STATUS_LINE,:] == 'P').astype(bool)
+        isActive = (isPatient.astype(int) * (F[self.PCR_HOSPITALIZED_LINE,:].astype(int) + F[self.RAPID_TEST_LINE,:].astype(int))).astype(bool)
         if (_doAppend):
             self.X = np.concatenate((self.X, X), axis=1) if len(self.X) else X
             self.F = np.concatenate((self.F, F), axis=1) if len(self.F) else F
             self.isPatient = np.concatenate((self.isPatient, isPatient)) if len(self.isPatient) else isPatient
-            #self.isActive = np.concatenate((self.isActive, isActive)) if len(self.isActive) else isActive
-            #self.isNonActive = np.concatenate((self.isNonActive, isNonActive)) if len(self.isNonActive) else isNonActive
+            self.isActive = np.concatenate((self.isActive, isActive)) if len(self.isActive) else isActive
         else:
             self.X = X
             self.F = F
             self.isPatient = isPatient
-            #self.isActive = isActive
-            #self.isNonActive = isNonActive
+            self.isActive = isActive
 
+    """
+        Method: flattenData
+    """ 
+    def flattenData(self, _appendThis='all'):
+        """
+            Return a single matrix (DxN) concatenating the actual measurements with the metadate (age, etc.)
+                D: Problem Dimension = # of measurements + # of extra data
+                M: Number of patients
+            Patients' records are stored vertically (Columns) - meta data are added in the begining of the new matrix
+            
+            _appendThis (array of str): Define which extra data to append: age - smoking - all (default)
+                                        IMPORTANT: Extra data is added according to the order specified in _appendThis
+        """
+
+        D = self.X.shape[0] + (1 if (_appendThis != 'all') else 2)
+        M = self.X.shape[1]
+
+        dataX = np.zeros((D,M))
+
+        # Add extra data (meta data)
+        if (_appendThis == 'age'):
+            dataX[0,:] = self.F[self.AGE_LINE,:]
+            appendInd = 1
+        elif (_appendThis == 'smoking'):
+            dataX[0,:] = self.F[self.SMOKING_LINE,:]
+            appendInd = 1
+        else:
+            # assume all
+            dataX[0,:] = self.F[self.AGE_LINE,:]
+            dataX[1,:] = self.F[self.SMOKING_LINE,:]
+            appendInd = 2
+        
+        # Add actual measurements
+        dataX[appendInd:D,:] = self.X
+
+        return (dataX)
     """
         Method: prepareCrossValidation
     """ 
-    def prepareCrossValidation(self, _trainPct=.9):
+    def prepareCrossValidation(self, _trainPct=.9, _allInd=None):
         """
             Suffle the training set and prepare two sets: Training & Testing
             
             _trainPct: (% in (0,1)) - percentage of data to use for the training set
                         Default is 10-fold cross validation
+            _Ind: Return from these indices (If None, use all indices)
 
             RETURN: (trainInd, testInd): The indices of self.X to contain the training and testing observations respectively.
         """
-
         if _trainPct <=0 or _trainPct >=1:
             _trainPct = .9 # default is 10-fold cross validation
         
-        allInd = list(range(0,self.X.shape[1]))
-        random.shuffle(allInd)
+        if _allInd is None:
+            _allInd = list(range(0,self.X.shape[1]))
+        random.shuffle(_allInd)
 
-        breakInd = math.floor(_trainPct*self.X.shape[1])
-        trainInd = allInd[0:breakInd]
-        testInd  = allInd[breakInd:]
+        breakInd = math.floor(_trainPct*len(_allInd))
+        trainInd = _allInd[0:breakInd]
+        testInd  = _allInd[breakInd:]
 
         return(trainInd, testInd)
         
@@ -234,8 +278,8 @@ class theStudy:
             elif not self.isPatient[_Ind[i]] and not _Y[i]:
                 TN + TN + 1
 
-        R = TP/(TP+FN)
-        P = TP/(TP+FP)
+        R = TP/(TP+FN + .0000000000000000001)
+        P = TP/(TP+FP + .0000000000000000001)
         F1 = 2*P*R/((P+R) + .0000000000000000001)
 
         return (P,R,F1)
