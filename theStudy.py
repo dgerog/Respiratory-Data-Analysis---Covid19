@@ -4,6 +4,7 @@ import statsmodels.api as sm
 import matplotlib.pyplot as plt
 import random
 import math
+from sklearn import preprocessing
 
 class theStudy:
     """
@@ -129,7 +130,7 @@ class theStudy:
     """
         Method: readTable
     """ 
-    def readTable(self, _path,  _colsToRead, _sheetToRead=0, _doAppend=False, _doFilterData=False):
+    def readTable(self, _path,  _colsToRead, _sheetToRead=0, _doAppend=False, _doFilterData=False, _doNormalize=False):
         """
             Read an excel/csv file to extract the table data.
             Patients' records are stored vertically (Columns)
@@ -142,6 +143,7 @@ class theStudy:
                         FALSE: Initialize with the data - Drop old records (default).
                         TRUE: Append to existing records.
             _doFilterData: Wheather to remove max value (True/False)
+            _doNormalize: Perform normalization (True/False)
         """
         # Read data
         T = pd.read_excel(io=_path, header=None, usecols=_colsToRead, sheet_name=_sheetToRead, dtype=str).values
@@ -162,14 +164,21 @@ class theStudy:
         #
         # Read the respiratory data
         #
-        X = T[self.MEASUREMENT_START_LINE:,:].astype(float)
+        X = T[self.MEASUREMENT_START_LINE:250,:].astype(float)
 
         if _doFilterData:
             # upper bound filter
             for i in range(0,X.shape[1]):
                 th = np.max(X[:,i])
-                X[X[:,i]>=th,i] = np.min(X[:,i])
+                X[X[:,i]>=th,i] = 0
 
+                th = .01
+                X[X[:,i]<=th,i] = 0
+        
+        if _doNormalize:
+            # normalize per record
+            X = np.transpose(preprocessing.normalize(np.transpose(X), norm='max'))
+        
         #
         # Assign patient labels
         #
@@ -197,29 +206,30 @@ class theStudy:
             Patients' records are stored vertically (Columns) - meta data are added in the begining of the new matrix
             
             _appendThis (array of str): Define which extra data to append: age - smoking - all (default)
+                                        None for returning the actual measurements.
                                         IMPORTANT: Extra data is added according to the order specified in _appendThis
         """
-
-        D = self.X.shape[0] + (1 if (_appendThis != 'all') else 2)
-        M = self.X.shape[1]
-
-        dataX = np.zeros((D,M))
-
-        # Add extra data (meta data)
-        if (_appendThis == 'age'):
-            dataX[0,:] = self.F[self.AGE_LINE,:]
-            appendInd = 1
-        elif (_appendThis == 'smoking'):
-            dataX[0,:] = self.F[self.SMOKING_LINE,:]
-            appendInd = 1
+        D = self.X.shape[0]
+        if (not _appendThis is None):
+            D = D + (1 if (_appendThis != 'all') else 2)
+            M = self.X.shape[1]
+            dataX = np.zeros((D,M))
+            # Add extra data (meta data)
+            if (_appendThis == 'age'):
+                dataX[0,:] = self.F[self.AGE_LINE,:]
+                appendInd = 1
+            elif (_appendThis == 'smoking'):
+                dataX[0,:] = self.F[self.SMOKING_LINE,:]
+                appendInd = 1
+            else:
+                # assume all
+                dataX[0,:] = self.F[self.AGE_LINE,:]
+                dataX[1,:] = self.F[self.SMOKING_LINE,:]
+                appendInd = 2
+            # Add actual measurements
+            dataX[appendInd:D,:] = self.X
         else:
-            # assume all
-            dataX[0,:] = self.F[self.AGE_LINE,:]
-            dataX[1,:] = self.F[self.SMOKING_LINE,:]
-            appendInd = 2
-        
-        # Add actual measurements
-        dataX[appendInd:D,:] = self.X
+            dataX = self.X
 
         return (dataX)
     """
@@ -258,11 +268,12 @@ class theStudy:
                 Precission
                 Recall
                 F1 Measure
-            
+                Accuracy
+
             _Y: The computed labels - Analyze this classification result (True/False).
             _Ind: The index of the observation => Y[i] is tested against self.X[_Ind[i]]
 
-            RETURN: (P,R,F1): Precission, Recall, F1 Measure
+            RETURN: (P,R,F1,A): Precission, Recall, F1 Measure, Accuracy
         """
 
         TP = 0 # True Positive
@@ -283,5 +294,6 @@ class theStudy:
         R = TP/(TP+FN + .0000000000000000001)
         P = TP/(TP+FP + .0000000000000000001)
         F1 = 2*P*R/((P+R) + .0000000000000000001)
-
-        return (P,R,F1)
+        A = (TP + TN)/(TP + TN + FP + FN + .0000000000000000001)
+        
+        return (P,R,F1, A)

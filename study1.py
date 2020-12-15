@@ -63,6 +63,8 @@ AGE_GROUPS_TO_SPLIT = 4
 
 ITERS = 10
 
+K = 10
+
 study = theStudy()
 
 # 
@@ -74,8 +76,13 @@ for i in range(0, len(FILE_INPUT)):
 #
 # Start the experiments
 #
+print ('|------------------------------------------------------------------------|')
+print ('|                                GMM Method                              |')
+print ('|------------------------------------------------------------------------|')
+print ('|   Age Min | Age Max |  K  | Precision | Recall | F1 Measure | Accuracy |')
+print ('|------------------------------------------------------------------------|')
 
-dataX = study.flattenData(_appendThis='all')
+dataX = study.flattenData(_appendThis='age')
 
 # Split age groups
 ages = study.F[study.AGE_LINE,:].astype(int);
@@ -83,7 +90,7 @@ ages = study.F[study.AGE_LINE,:].astype(int);
 for ageGroup in range(0, len(ageB)-1):
     ageInd = np.where((ages>=ageB[ageGroup]) * (ages<ageB[ageGroup+1]))
     ageInd = ageInd[0]
-    (R, P, F1) = (0, 0, 0)
+    (R, P, F1, A) = (0, 0, 1, 0)
     for iter in range(0,ITERS):
         (tr, te) = study.prepareCrossValidation(_trainPct=.7, _allInd=ageInd)
         # get two groups (Patients & Healthy) - TRAINING
@@ -92,19 +99,19 @@ for ageGroup in range(0, len(ageB)-1):
         indHtr = np.where(study.isPatient[tr] == False) # healthy index
         indHtr = indHtr[0]
         # estimate number of clusters (training)
-        kP = study.kneeThresholding(_X=study.X[:,indPtr], _oFName=STORAGE_DIR + 'TR-P_AGE_' + str(ageGroup) + '_ITER_' + str(iter) + '.eps')
-        kH = study.kneeThresholding(_X=study.X[:,indHtr], _oFName=STORAGE_DIR + 'TR-H_AGE_' + str(ageGroup) + '_ITER_' + str(iter) + '.eps')
+        #kP = study.kneeThresholding(_X=study.X[:,indPtr], _oFName=STORAGE_DIR + 'TR-P_AGE_' + str(ageGroup) + '_ITER_' + str(iter) + '.eps')
+        #kH = study.kneeThresholding(_X=study.X[:,indHtr], _oFName=STORAGE_DIR + 'TR-H_AGE_' + str(ageGroup) + '_ITER_' + str(iter) + '.eps')
 
         #
         # Method 1: GMM
         #
 
         # Learn patients patterns
-        gmmP = mixture.GaussianMixture(n_components=kP)
+        gmmP = mixture.GaussianMixture(n_components=K)
         gmmP.fit(np.transpose(dataX[:,indPtr]))
 
         # Learn healthy patterns
-        gmmH = mixture.GaussianMixture(n_components=kH)
+        gmmH = mixture.GaussianMixture(n_components=K)
         gmmH.fit(np.transpose(dataX[:,indHtr]))
 
         # analysis on healthy patterns
@@ -112,17 +119,13 @@ for ageGroup in range(0, len(ageB)-1):
         p2 = gmmH.score_samples(np.transpose(dataX[:,te])) # test against healthy model
         Z = p1 > p2 # get the computed label (if True -> Patient)
 
-        (Pi, Ri, F1i) = study.classificationAnalysis(Z, te)
+        (Pi, Ri, F1i, Ai) = study.classificationAnalysis(Z, te)
 
-        P = P + Pi
-        R = R + Ri
-        F1 = F1 + F1i
-
-    print ('|-----------------------------------------|')
-    print ('|               GMM Method                |')
-    print ('|-----------------------------------------|')
-    print ('| AGE GROUP: %02.1f - %02.1f                  |' % (ageB[ageGroup], ageB[ageGroup+1]))
-    print ('|-----------------------------------------|')
-    print ('|      Precision | Recall | F1 Measure    |')
-    print ('|        %2.2f    |  %2.2f  |    %2.2f       |' % (P/ITERS, R/ITERS, F1/ITERS))
-    print ('|-----------------------------------------|')
+        if F1i < F1:
+            P  = Pi
+            R  = Ri
+            F1 = F1i
+            A  = Ai
+    
+    print ('|   %7.1f | %7.1f | %2d  | %9.2f | %6.2f | %10.2f | %8.2f |' % (ageB[ageGroup], ageB[ageGroup+1], K, P, R, F1, A))
+print ('|------------------------------------------------------------------------|')

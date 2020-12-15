@@ -59,13 +59,13 @@ COLS_TO_USE = [
 SHEETS_TO_USE = 1
 
 # how many age groups to split
-AGE_GROUPS_TO_SPLIT = 5
+AGE_GROUPS_TO_SPLIT = 4
 
 # percentage of points to use for training (rest is for testing)
 TRAIN_PCT = .8
 
 ITERS = 20
-NEIGHBORS = [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20]
+NEIGHBORS = [1,2,3,4,5,7,10,12,15,18,20]
 
 study = theStudy()
 
@@ -73,13 +73,20 @@ study = theStudy()
 # read the data
 #
 for i in range(0, len(FILE_INPUT)):
-    study.readTable(_path=FILE_INPUT[i], _colsToRead=COLS_TO_USE[i], _sheetToRead=SHEETS_TO_USE, _doAppend=True, _doFilterData=True)
+    study.readTable(_path=FILE_INPUT[i], _colsToRead=COLS_TO_USE[i], _sheetToRead=SHEETS_TO_USE, 
+    _doAppend=True, 
+    _doFilterData=True, _doNormalize=True)
 
 #
 # Start the experiments
 #
+print ('|------------------------------------------------------------------------|')
+print ('|                                kNN Method                              |')
+print ('|------------------------------------------------------------------------|')
+print ('|   Age Min | Age Max |  K  | Precision | Recall | F1 Measure | Accuracy |')
+print ('|------------------------------------------------------------------------|')
 
-dataX = study.flattenData(_appendThis='all')
+dataX = study.flattenData(_appendThis=None)
 
 # Split age groups
 ages = study.F[study.AGE_LINE,:].astype(int)
@@ -89,8 +96,11 @@ for ageGroup in range(0, len(ageB)-1):
     ageInd = ageInd[0]
     bestF1 = -1
     for n in NEIGHBORS:
-        (R, P, F1) = (0, 0, 0)
-        classifier = KNeighborsClassifier(n_neighbors=n)
+        if n >= .1*len(ageInd):
+            continue
+
+        (R, P, F1, A) = (0, 0, 1, 0)
+        classifier = KNeighborsClassifier(n_neighbors=n, metric='manhattan')
         for iter in range(0,ITERS):
             (tr, te) = study.prepareCrossValidation(_trainPct=TRAIN_PCT, _allInd=ageInd)
             # assign labels
@@ -105,28 +115,20 @@ for ageGroup in range(0, len(ageB)-1):
 
             # predict & analyze
             Z = classifier.predict(np.transpose(dataX[:,te]))
-            (Pi, Ri, F1i) = study.classificationAnalysis(Z.astype(bool), te)
+            (Pi, Ri, F1i, Ai) = study.classificationAnalysis(Z.astype(bool), te)
 
-            P  = P + Pi
-            R  = R + Ri
-            F1 = F1 + F1i
+            if F1i < F1:
+                P  = Pi
+                R  = Ri
+                F1 = F1i
+                A  = Ai
         
-        P  = P/ITERS
-        R  = R/ITERS
-        F1 = F1/ITERS
         if F1 > bestF1:
             bestF1 = F1
             bestR  = R
             bestP  = P
+            bestA  = A
             K      = n
     
-    print ('|-----------------------------------------|')
-    print ('|               kNN Method                |')
-    print ('|-----------------------------------------|')
-    print ('| AGE GROUP: %02.1f - %02.1f                  |' % (ageB[ageGroup], ageB[ageGroup+1]))
-    print ('|-----------------------------------------|')
-    print ('| For K = %02d                              |' % (K))
-    print ('|-----------------------------------------|')
-    print ('|      Precision | Recall | F1 Measure    |')
-    print ('|        %2.2f    |  %2.2f  |    %2.2f       |' % (bestP, bestR, bestF1))
-    print ('|-----------------------------------------|')
+    print ('|   %7.1f | %7.1f | %2d  | %9.2f | %6.2f | %10.2f | %8.2f |' % (ageB[ageGroup], ageB[ageGroup+1], K, bestP, bestR, bestF1, bestA))
+print ('|------------------------------------------------------------------------|')

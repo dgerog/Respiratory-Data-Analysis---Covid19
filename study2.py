@@ -75,6 +75,11 @@ for i in range(0, len(FILE_INPUT)):
 #
 # Start the experiments
 #
+print ('|------------------------------------------------------------------|')
+print ('|                             RVM Method                           |')
+print ('|------------------------------------------------------------------|')
+print ('|   Age Min | Age Max | Precision | Recall | F1 Measure | Accuracy |')
+print ('|------------------------------------------------------------------|')
 
 dataX = study.flattenData(_appendThis='age')
 
@@ -84,7 +89,7 @@ ages = study.F[study.AGE_LINE,:].astype(int);
 for ageGroup in range(0, len(ageB)-1):
     ageInd = np.where((ages>=ageB[ageGroup]) * (ages<ageB[ageGroup+1]))
     ageInd = ageInd[0]
-    (R, P, F1) = (0, 0, 0)
+    (R, P, F1, A) = (0, 0, 1, 0)
     for iter in range(0,ITERS):
         (tr, te) = study.prepareCrossValidation(_trainPct=.7, _allInd=ageInd)
         # assign labels
@@ -100,17 +105,12 @@ for ageGroup in range(0, len(ageB)-1):
 
         # predict & analyze
         Z = gpc.predict(np.transpose(dataX[:,te]))
-        (Pi, Ri, F1i) = study.classificationAnalysis(Z.astype(bool), te)
+        (Pi, Ri, F1i, Ai) = study.classificationAnalysis(Z.astype(bool), te)
 
         P = P + Pi
         R = R + Ri
         F1 = F1 + F1i
+        A  = A + Ai
 
-    print ('|-----------------------------------------|')
-    print ('|               RBF Method                |')
-    print ('|-----------------------------------------|')
-    print ('| AGE GROUP: %02.1f - %02.1f                  |' % (ageB[ageGroup], ageB[ageGroup+1]))
-    print ('|-----------------------------------------|')
-    print ('|      Precision | Recall | F1 Measure    |')
-    print ('|        %2.2f    |  %2.2f  |    %2.2f       |' % (P/ITERS, R/ITERS, F1/ITERS))
-    print ('|-----------------------------------------|')
+    print ('|   %7.1f | %7.1f | %9.2f | %6.2f | %10.2f | %8.2f |' % (ageB[ageGroup], ageB[ageGroup+1], P/ITERS, R/ITERS, F1/ITERS, A/ITERS))
+print ('|------------------------------------------------------------------------|')

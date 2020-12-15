@@ -79,8 +79,13 @@ for i in range(0, len(FILE_INPUT)):
 #
 # Start the experiments
 #
+print ('|------------------------------------------------------------------------|')
+print ('|                        kNN (with PCA) Method                           |')
+print ('|------------------------------------------------------------------------|')
+print ('|   Age Min | Age Max |  K  | Precision | Recall | F1 Measure | Accuracy |')
+print ('|------------------------------------------------------------------------|')
 
-dataX = study.flattenData(_appendThis='all')
+dataX = study.flattenData(_appendThis='age')
 
 transformer = KernelPCA(n_components=10, kernel='linear', degree=5, gamma=.1)
 
@@ -92,7 +97,7 @@ for ageGroup in range(0, len(ageB)-1):
     ageInd = ageInd[0]
     bestF1 = -1
     for n in NEIGHBORS:
-        (R, P, F1) = (0, 0, 0)
+        (R, P, F1, A) = (0, 0, 1, 0)
         classifier = KNeighborsClassifier(n_neighbors=n)
         for iter in range(0,ITERS):
             (tr, te) = study.prepareCrossValidation(_trainPct=TRAIN_PCT, _allInd=ageInd)
@@ -110,28 +115,20 @@ for ageGroup in range(0, len(ageB)-1):
             # predict & analyze
             X_transformed = transformer.fit_transform(np.transpose(dataX[:,te]))
             Z = classifier.predict(X_transformed)
-            (Pi, Ri, F1i) = study.classificationAnalysis(Z.astype(bool), te)
+            (Pi, Ri, F1i, Ai) = study.classificationAnalysis(Z.astype(bool), te)
 
-            P  = P + Pi
-            R  = R + Ri
-            F1 = F1 + F1i
+            if F1i < F1:
+                P  = Pi
+                R  = Ri
+                F1 = F1i
+                A  = Ai
         
-        P  = P/ITERS
-        R  = R/ITERS
-        F1 = F1/ITERS
         if F1 > bestF1:
             bestF1 = F1
             bestR  = R
             bestP  = P
+            bestA  = A
             K      = n
     
-    print ('|-----------------------------------------|')
-    print ('|               kNN Method                |')
-    print ('|-----------------------------------------|')
-    print ('| AGE GROUP: %02.1f - %02.1f                  |' % (ageB[ageGroup], ageB[ageGroup+1]))
-    print ('|-----------------------------------------|')
-    print ('| For K = %02d                              |' % (K))
-    print ('|-----------------------------------------|')
-    print ('|      Precision | Recall | F1 Measure    |')
-    print ('|        %2.2f    |  %2.2f  |    %2.2f       |' % (bestP, bestR, bestF1))
-    print ('|-----------------------------------------|')
+    print ('|   %7.1f | %7.1f | %2d  | %9.2f | %6.2f | %10.2f | %8.2f |' % (ageB[ageGroup], ageB[ageGroup+1], K, bestP, bestR, bestF1, bestA))
+print ('|------------------------------------------------------------------------|')
