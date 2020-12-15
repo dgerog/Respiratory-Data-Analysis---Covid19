@@ -1,7 +1,9 @@
 from theStudy import *
 
-from sklearn.gaussian_process import GaussianProcessClassifier
-from sklearn.gaussian_process.kernels import RBF
+from sklearn import svm
+
+def my_kernel(X, Y):
+    return (np.dot(X,Y.T))
 
 # in file
 FILE_INPUT = [
@@ -76,12 +78,14 @@ for i in range(0, len(FILE_INPUT)):
 # Start the experiments
 #
 print ('|------------------------------------------------------------------|')
-print ('|                             RVM Method                           |')
+print ('|                           SVM Method                             |')
 print ('|------------------------------------------------------------------|')
 print ('|   Age Min | Age Max | Precision | Recall | F1 Measure | Accuracy |')
 print ('|------------------------------------------------------------------|')
 
 dataX = study.flattenData(_appendThis='age')
+
+clf = svm.SVC(kernel=my_kernel)
 
 # Split age groups
 ages = study.F[study.AGE_LINE,:].astype(int);
@@ -97,20 +101,21 @@ for ageGroup in range(0, len(ageB)-1):
         indPtr = indPtr[0]
         Labels = np.zeros((len(tr)))
         Labels[indPtr] = 1
+
         #
-        # Method 2: RBF
+        # Method 2: SVM
         #
-        kernel = 1.0 * RBF(1.0)
-        gpc = GaussianProcessClassifier(kernel=kernel, random_state=0).fit(np.transpose(dataX[:,tr]), Labels)
+        clf.fit(np.transpose(dataX[:,tr]), Labels)
+        Z = clf.predict(np.transpose(dataX[:,te]))
 
         # predict & analyze
-        Z = gpc.predict(np.transpose(dataX[:,te]))
-        (Pi, Ri, F1i, Ai) = study.classificationAnalysis(Z.astype(bool), te)
+        (Pi, Ri, F1i, Ai) = study.classificationAnalysis(Z, te)
 
-        P = P + Pi
-        R = R + Ri
-        F1 = F1 + F1i
-        A  = A + Ai
+        if F1i < F1:
+            P  = Pi
+            R  = Ri
+            F1 = F1i
+            A  = Ai
 
     print ('|   %7.1f | %7.1f | %9.2f | %6.2f | %10.2f | %8.2f |' % (ageB[ageGroup], ageB[ageGroup+1], P/ITERS, R/ITERS, F1/ITERS, A/ITERS))
-print ('|------------------------------------------------------------------------|')
+print ('|------------------------------------------------------------------|')

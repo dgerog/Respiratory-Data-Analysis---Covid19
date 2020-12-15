@@ -75,7 +75,7 @@ study = theStudy()
 for i in range(0, len(FILE_INPUT)):
     study.readTable(_path=FILE_INPUT[i], _colsToRead=COLS_TO_USE[i], _sheetToRead=SHEETS_TO_USE, 
     _doAppend=True, 
-    _doFilterData=True, _doNormalize=True)
+    _doFilterData=False, _doNormalize=True)
 
 #
 # Start the experiments
@@ -108,6 +108,7 @@ for ageGroup in range(0, len(ageB)-1):
             indPtr = indPtr[0]
             Labels = np.zeros((len(tr)))
             Labels[indPtr] = 1
+
             #
             # Method 3: kNN
             #

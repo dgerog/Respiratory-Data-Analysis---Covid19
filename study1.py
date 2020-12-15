@@ -71,7 +71,8 @@ study = theStudy()
 # read the data
 #
 for i in range(0, len(FILE_INPUT)):
-    study.readTable(_path=FILE_INPUT[i], _colsToRead=COLS_TO_USE[i], _sheetToRead=SHEETS_TO_USE, _doAppend=True, _doFilterData=True)
+    study.readTable(_path=FILE_INPUT[i], _colsToRead=COLS_TO_USE[i], _sheetToRead=SHEETS_TO_USE, 
+    _doAppend=True, _doFilterData=True)
 
 #
 # Start the experiments
@@ -98,10 +99,7 @@ for ageGroup in range(0, len(ageB)-1):
         indPtr = indPtr[0]
         indHtr = np.where(study.isPatient[tr] == False) # healthy index
         indHtr = indHtr[0]
-        # estimate number of clusters (training)
-        #kP = study.kneeThresholding(_X=study.X[:,indPtr], _oFName=STORAGE_DIR + 'TR-P_AGE_' + str(ageGroup) + '_ITER_' + str(iter) + '.eps')
-        #kH = study.kneeThresholding(_X=study.X[:,indHtr], _oFName=STORAGE_DIR + 'TR-H_AGE_' + str(ageGroup) + '_ITER_' + str(iter) + '.eps')
-
+        
         #
         # Method 1: GMM
         #

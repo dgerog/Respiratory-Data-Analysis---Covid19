@@ -285,9 +285,9 @@ class theStudy:
             if self.isPatient[_Ind[i]] and _Y[i]:
                 TP = TP + 1
             elif self.isPatient[_Ind[i]] and not _Y[i]:
-                FP = FP + 1
-            elif not self.isPatient[_Ind[i]] and _Y[i]:
                 FN = FN + 1
+            elif not self.isPatient[_Ind[i]] and _Y[i]:
+                FP = FP + 1
             elif not self.isPatient[_Ind[i]] and not _Y[i]:
                 TN + TN + 1
 
