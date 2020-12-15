@@ -22,6 +22,8 @@ class theStudy:
     
     def __init__(self):
         #constants
+        self.MEASUREMENT_START_LINE = 7 # start reading actual data from this line and beyond
+
         self.STATUS_LINE           = 0
         self.PCR_TEST_LINE         = 1
         self.PCR_HOSPITALIZED_LINE = 2
@@ -160,7 +162,7 @@ class theStudy:
         #
         # Read the respiratory data
         #
-        X = T[7:,:].astype(float)
+        X = T[self.MEASUREMENT_START_LINE:,:].astype(float)
 
         if _doFilterData:
             # upper bound filter
