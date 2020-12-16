@@ -1,6 +1,6 @@
 from theStudy import *
 
-from sklearn import mixture
+from sklearn.neighbors import KNeighborsClassifier
 
 # in file
 FILE_INPUT = [
@@ -59,11 +59,13 @@ COLS_TO_USE = [
 SHEETS_TO_USE = 1
 
 # how many age groups to split
-AGE_GROUPS_TO_SPLIT = 4
+AGE_GROUPS_TO_SPLIT = 5
 
-ITERS = 10
+# percentage of points to use for training (rest is for testing)
+TRAIN_PCT = .8
 
-K = 10
+ITERS = 20
+NEIGHBORS = [1,2,3,4,5,7,10,12,15,18,20]
 
 study = theStudy()
 
@@ -72,58 +74,73 @@ study = theStudy()
 #
 for i in range(0, len(FILE_INPUT)):
     study.readTable(_path=FILE_INPUT[i], _colsToRead=COLS_TO_USE[i], _sheetToRead=SHEETS_TO_USE, 
-    _doAppend=True, _doFilterData=True)
+    _doAppend=True, 
+    _doFilterData=False, _doNormalize=True)
 
 #
 # Start the experiments
 #
 print ('|---------------------------------------------------------------------------------------|')
-print ('|                                       GMM Method                                      |')
+print ('|                             kNN Method (Manhattan, Weight)                            |')
 print ('|---------------------------------------------------------------------------------------|')
-print ('|   Age Min | Age Max |  # of Records | K  | Precision | Recall | F1 Measure | Accuracy |')
+print ('|   Age Min | Age Max |  # of Records |  K | Precision | Recall | F1 Measure | Accuracy |')
 print ('|---------------------------------------------------------------------------------------|')
 
-dataX = study.flattenData(_appendThis='age')
+dataX = study.flattenData(_appendThis=None)
 
 # Split age groups
-ages = study.F[study.AGE_LINE,:].astype(int);
+ages = study.F[study.AGE_LINE,:].astype(int)
 (ageH, ageB) = np.histogram(ages, bins=AGE_GROUPS_TO_SPLIT)
 for ageGroup in range(0, len(ageB)-1):
     ageInd = np.where((ages>=ageB[ageGroup]) * (ages<ageB[ageGroup+1]))
     ageInd = ageInd[0]
-    (R, P, F1, A) = (0, 0, 1, 0)
-    for iter in range(0,ITERS):
-        (tr, te) = study.prepareCrossValidation(_trainPct=.7, _allInd=ageInd)
-        # get two groups (Patients & Healthy) - TRAINING
-        indPtr = np.where(study.isActive[tr] == True)  # patients' index
-        indPtr = indPtr[0]
-        indHtr = np.where(study.isPatient[tr] == False) # healthy index
-        indHtr = indHtr[0]
+    bestF1 = -1
+    for n in NEIGHBORS:
+        if n >= .1*len(ageInd):
+            continue
+
+        (R, P, F1, A) = (0, 0, 1, 0)
+        for iter in range(0,ITERS):
+            (tr, te) = study.prepareCrossValidation(_trainPct=TRAIN_PCT, _allInd=ageInd)
+            
+            # get weights
+            [v, e] = np.linalg.eig(np.cov(dataX[:,tr]))
+            v = np.abs(v)
+            classifier = KNeighborsClassifier(n_neighbors=n, 
+                metric='wminkowski',
+                p=1,
+                metric_params= {
+                    "w": v/(np.sum(v) + .0000000000000000001)
+                }
+            )
+
+            # assign labels
+            indPtr = np.where(study.isActive[tr] == True)  # patients' index
+            indPtr = indPtr[0]
+            Labels = np.zeros((len(tr)))
+            Labels[indPtr] = 1
+
+            #
+            # Method 3: kNN
+            #
+            classifier.fit(np.transpose(dataX[:,tr]), Labels)
+
+            # predict & analyze
+            Z = classifier.predict(np.transpose(dataX[:,te]))
+            (Pi, Ri, F1i, Ai) = study.classificationAnalysis(Z.astype(bool), te)
+
+            if F1i < F1:
+                P  = Pi
+                R  = Ri
+                F1 = F1i
+                A  = Ai
         
-        #
-        # Method 1: GMM
-        #
-
-        # Learn patients patterns
-        gmmP = mixture.GaussianMixture(n_components=K)
-        gmmP.fit(np.transpose(dataX[:,indPtr]))
-
-        # Learn healthy patterns
-        gmmH = mixture.GaussianMixture(n_components=K)
-        gmmH.fit(np.transpose(dataX[:,indHtr]))
-
-        # analysis on healthy patterns
-        p1 = gmmP.score_samples(np.transpose(dataX[:,te])) # test against patients' model
-        p2 = gmmH.score_samples(np.transpose(dataX[:,te])) # test against healthy model
-        Z = p1 > p2 # get the computed label (if True -> Patient)
-
-        (Pi, Ri, F1i, Ai) = study.classificationAnalysis(Z, te)
-
-        if F1i < F1:
-            P  = Pi
-            R  = Ri
-            F1 = F1i
-            A  = Ai
+        if F1 > bestF1:
+            bestF1 = F1
+            bestR  = R
+            bestP  = P
+            bestA  = A
+            K      = n
     
-    print ('|   %7.1f | %7.1f | %13d | %2d | %9.2f | %6.2f | %10.2f | %8.2f |' % (ageB[ageGroup], ageB[ageGroup+1], len(ageInd), K, P, R, F1, A))
+    print ('|   %7.1f | %7.1f | %13d | %2d | %9.2f | %6.2f | %10.2f | %8.2f |' % (ageB[ageGroup], ageB[ageGroup+1], len(ageInd), K, bestP, bestR, bestF1, bestA))
 print ('|---------------------------------------------------------------------------------------|')

@@ -79,11 +79,11 @@ for i in range(0, len(FILE_INPUT)):
 #
 # Start the experiments
 #
-print ('|------------------------------------------------------------------------|')
-print ('|                        kNN (with PCA) Method                           |')
-print ('|------------------------------------------------------------------------|')
-print ('|   Age Min | Age Max |  K  | Precision | Recall | F1 Measure | Accuracy |')
-print ('|------------------------------------------------------------------------|')
+print ('|---------------------------------------------------------------------------------------|')
+print ('|                          kNN (with PCA) Method - Manhattan                            |')
+print ('|---------------------------------------------------------------------------------------|')
+print ('|   Age Min | Age Max |  # of Records | K  | Precision | Recall | F1 Measure | Accuracy |')
+print ('|---------------------------------------------------------------------------------------|')
 
 dataX = study.flattenData(_appendThis='age')
 
@@ -130,5 +130,5 @@ for ageGroup in range(0, len(ageB)-1):
             bestA  = A
             K      = n
     
-    print ('|   %7.1f | %7.1f | %2d  | %9.2f | %6.2f | %10.2f | %8.2f |' % (ageB[ageGroup], ageB[ageGroup+1], K, bestP, bestR, bestF1, bestA))
-print ('|------------------------------------------------------------------------|')
+    print ('|   %7.1f | %7.1f | %13d | %2d | %9.2f | %6.2f | %10.2f | %8.2f |' % (ageB[ageGroup], ageB[ageGroup+1], len(ageInd), K, bestP, bestR, bestF1, bestA))
+print ('|---------------------------------------------------------------------------------------|')
