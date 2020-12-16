@@ -97,31 +97,30 @@ for ageGroup in range(0, len(ageB)-1):
     (R, P, F1, A) = (0, 0, 1, 0)
     for iter in range(0,ITERS):
         (tr, te) = study.prepareCrossValidation(_trainPct=TRAIN_PCT, _allInd=ageInd)
+        
         # get two groups (Patients & Healthy) - TRAINING
         indPtr = np.where(study.isActive[tr] == True)  # patients' index
         indPtr = indPtr[0]
         indHtr = np.where(study.isPatient[tr] == False) # healthy index
         indHtr = indHtr[0]
-        
+
+        gmm = mixture.GaussianMixture(
+            n_components=2, 
+            means_init=[
+                np.transpose(np.mean(dataX[:,indHtr], axis=1)),
+                np.transpose(np.mean(dataX[:,indPtr], axis=1)),
+            ]
+        )
+
         #
         # Method 1: GMM
         #
-
-        # Learn patients patterns
-        gmmP = mixture.GaussianMixture(n_components=K)
-        gmmP.fit(np.transpose(dataX[:,indPtr]))
-
-        # Learn healthy patterns
-        gmmH = mixture.GaussianMixture(n_components=K)
-        gmmH.fit(np.transpose(dataX[:,indHtr]))
+        gmm.fit(np.transpose(dataX[:,indPtr]))
 
         # analysis on healthy patterns
-        p1 = gmmP.score_samples(np.transpose(dataX[:,te])) # test against patients' model
-        p2 = gmmH.score_samples(np.transpose(dataX[:,te])) # test against healthy model
-        Z = p1 > p2 # get the computed label (if True -> Patient)
-
-        (Pi, Ri, F1i, Ai) = study.classificationAnalysis(Z, te)
-
+        Z = gmm.predict(np.transpose(dataX[:,te]))
+        (Pi, Ri, F1i, Ai) = study.classificationAnalysis(Z.astype(bool), te)
+        
         if F1i < F1:
             P  = Pi
             R  = Ri

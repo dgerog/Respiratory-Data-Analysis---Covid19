@@ -59,7 +59,7 @@ COLS_TO_USE = [
 SHEETS_TO_USE = 1
 
 # how many age groups to split
-AGE_GROUPS_TO_SPLIT = 5
+AGE_GROUPS = [0,20,30,40,50,60,100]
 
 # percentage of points to use for training (rest is for testing)
 TRAIN_PCT = .8
@@ -90,7 +90,7 @@ dataX = study.flattenData(_appendThis=None)
 
 # Split age groups
 ages = study.F[study.AGE_LINE,:].astype(int)
-(ageH, ageB) = np.histogram(ages, bins=AGE_GROUPS_TO_SPLIT)
+(ageH, ageB) = np.histogram(ages, bins=AGE_GROUPS)
 for ageGroup in range(0, len(ageB)-1):
     ageInd = np.where((ages>=ageB[ageGroup]) * (ages<ageB[ageGroup+1]))
     ageInd = ageInd[0]
