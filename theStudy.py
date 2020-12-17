@@ -194,6 +194,21 @@ class theStudy:
             self.F = F
             self.isPatient = isPatient
             self.isActive = isActive
+    
+    """
+        Method: writeTable
+    """
+    def writeTable (self, _path, _X=None):
+        """
+            Export a table to a pdf file.
+            
+            _path (str): FULL path of the csv file to export - Write permission is assumed
+            _X: The table to export. None (default) to export the read table.
+        """        
+        if (_X is None):
+            pd.DataFrame(self.X).to_csv(_path)
+        else:
+            pd.DataFrame(_X).to_csv(_path)
 
     """
         Method: flattenData

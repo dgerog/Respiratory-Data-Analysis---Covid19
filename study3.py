@@ -143,3 +143,5 @@ for ageGroup in range(0, len(AGE_GROUPS)-1):
     
     print ('|   %7.1f | %7.1f | %13d | %9.2f | %6.2f | %10.2f | %8.2f |' % (AGE_GROUPS[ageGroup], AGE_GROUPS[ageGroup+1], len(ageInd), P, R, F1, A))
 print ('|----------------------------------------------------------------------------------|')
+
+study.writeTable(_path='results/all.csv')
