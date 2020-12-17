@@ -2,9 +2,6 @@ from theStudy import *
 
 from sklearn import svm
 
-def my_kernel(X, Y):
-    return (np.dot(X,Y.T))
-
 # in file
 FILE_INPUT = [
 './data/mass_spectra_2020_08_26.xlsx',
@@ -62,9 +59,13 @@ COLS_TO_USE = [
 SHEETS_TO_USE = 1
 
 # how many age groups to split
-AGE_GROUPS_TO_SPLIT = 4
+AGE_GROUPS = [0,20,40,65,100]
 
-ITERS = 10
+# percentage of points to use for training (rest is for testing)
+TRAIN_PCT = .70
+
+ITERS = 100
+NEIGHBORS = [1,2,3,4,5]
 
 study = theStudy()
 
@@ -72,50 +73,74 @@ study = theStudy()
 # read the data
 #
 for i in range(0, len(FILE_INPUT)):
-    study.readTable(_path=FILE_INPUT[i], _colsToRead=COLS_TO_USE[i], _sheetToRead=SHEETS_TO_USE, _doAppend=True, _doFilterData=True)
+    study.readTable(_path=FILE_INPUT[i], _colsToRead=COLS_TO_USE[i], _sheetToRead=SHEETS_TO_USE, 
+    _doAppend=True, 
+    _doFilterData=False, _doNormalize=True)
 
 #
 # Start the experiments
 #
-print ('|------------------------------------------------------------------|')
-print ('|                           SVM Method                             |')
-print ('|------------------------------------------------------------------|')
-print ('|   Age Min | Age Max | Precision | Recall | F1 Measure | Accuracy |')
-print ('|------------------------------------------------------------------|')
+print ('|----------------------------------------------------------------------------------|')
+print ('|                                       SVM                                        |')
+print ('|----------------------------------------------------------------------------------|')
+print ('|   Age Min | Age Max |  # of Records | Precision | Recall | F1 Measure | Accuracy |')
+print ('|----------------------------------------------------------------------------------|')
 
-dataX = study.flattenData(_appendThis='age')
+# initialize classifier
+classifier = svm.SVC()
 
-clf = svm.SVC(kernel=my_kernel)
+dataX = study.flattenData(_appendThis=None)
 
 # Split age groups
-ages = study.F[study.AGE_LINE,:].astype(int);
-(ageH, ageB) = np.histogram(ages, bins=AGE_GROUPS_TO_SPLIT)
-for ageGroup in range(0, len(ageB)-1):
-    ageInd = np.where((ages>=ageB[ageGroup]) * (ages<ageB[ageGroup+1]))
+ages = study.F[study.AGE_LINE,:].astype(int)
+for ageGroup in range(0, len(AGE_GROUPS)-1):
+    # find records in this age group
+    ageInd = np.where((ages>=AGE_GROUPS[ageGroup]) * (ages<AGE_GROUPS[ageGroup+1]))
     ageInd = ageInd[0]
-    (R, P, F1, A) = (0, 0, 1, 0)
-    for iter in range(0,ITERS):
-        (tr, te) = study.prepareCrossValidation(_trainPct=.7, _allInd=ageInd)
-        # assign labels
-        indPtr = np.where(study.isActive[tr] == True)  # patients' index
-        indPtr = indPtr[0]
-        Labels = np.zeros((len(tr)))
-        Labels[indPtr] = 1
 
-        #
-        # Method 2: SVM
-        #
-        clf.fit(np.transpose(dataX[:,tr]), Labels)
-        Z = clf.predict(np.transpose(dataX[:,te]))
+    # split in trainig and validation
+    (trALL, teALL) = study.prepareCrossValidation(_trainPct=TRAIN_PCT, _allInd=ageInd)
 
-        # predict & analyze
-        (Pi, Ri, F1i, Ai) = study.classificationAnalysis(Z, te)
+    # start training (exhaustive search)
+    bestF1 = -1
+    for n in NEIGHBORS:
+        if n >= .05*len(ageInd):
+            continue
+        
+        for iter in range(0,ITERS):
+            # split initial training in training and testing
+            (tr, te) = study.prepareCrossValidation(_trainPct=TRAIN_PCT, _allInd=trALL)
 
-        if F1i < F1:
-            P  = Pi
-            R  = Ri
-            F1 = F1i
-            A  = Ai
+            # assign labels
+            indPtr = np.where(study.isActive[tr] == True)  # patients' index
+            indPtr = indPtr[0]
+            Labels = np.zeros((len(tr)))
+            Labels[indPtr] = 1
 
-    print ('|   %7.1f | %7.1f | %9.2f | %6.2f | %10.2f | %8.2f |' % (ageB[ageGroup], ageB[ageGroup+1], P/ITERS, R/ITERS, F1/ITERS, A/ITERS))
-print ('|------------------------------------------------------------------|')
+            #
+            # Method 3: kNN
+            #
+            classifier.fit(np.transpose(dataX[:,tr]), Labels)
+
+            # predict & analyze
+            Z = classifier.predict(np.transpose(dataX[:,te]))
+            (P, R, F1, A) = study.classificationAnalysis(Z.astype(bool), te)
+            
+            if F1 > bestF1:
+                bestF1  = F1
+                bestN   = n
+                bestInd = tr
+    
+    # get the best trained model
+    indPtr = np.where(study.isActive[bestInd] == True)  # patients' index
+    indPtr = indPtr[0]
+    Labels = np.zeros((len(bestInd)))
+    Labels[indPtr] = 1
+    classifier.fit(np.transpose(dataX[:,bestInd]), Labels)
+
+    # validate model
+    Z = classifier.predict(np.transpose(dataX[:,teALL]))
+    (P, R, F1, A) = study.classificationAnalysis(Z.astype(bool), teALL)
+    
+    print ('|   %7.1f | %7.1f | %13d | %9.2f | %6.2f | %10.2f | %8.2f |' % (AGE_GROUPS[ageGroup], AGE_GROUPS[ageGroup+1], len(ageInd), P, R, F1, A))
+print ('|----------------------------------------------------------------------------------|')

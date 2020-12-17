@@ -60,13 +60,13 @@ COLS_TO_USE = [
 SHEETS_TO_USE = 1
 
 # how many age groups to split
-AGE_GROUPS = [0,20,30,40,50,60,100]
+AGE_GROUPS = [0,20,40,65,100]
 
 # percentage of points to use for training (rest is for testing)
-TRAIN_PCT = .8
+TRAIN_PCT = .70
 
-ITERS = 20
-NEIGHBORS = [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20]
+ITERS = 100
+NEIGHBORS = [1,2,3,4,5]
 
 study = theStudy()
 
@@ -74,38 +74,50 @@ study = theStudy()
 # read the data
 #
 for i in range(0, len(FILE_INPUT)):
-    study.readTable(_path=FILE_INPUT[i], _colsToRead=COLS_TO_USE[i], _sheetToRead=SHEETS_TO_USE, _doAppend=True, _doFilterData=True)
+    study.readTable(_path=FILE_INPUT[i], _colsToRead=COLS_TO_USE[i], _sheetToRead=SHEETS_TO_USE, 
+    _doAppend=True, 
+    _doFilterData=False, _doNormalize=True)
 
 #
 # Start the experiments
 #
-print ('|---------------------------------------------------------------------------------------|')
-print ('|                          kNN (with PCA) Method - Manhattan                            |')
-print ('|---------------------------------------------------------------------------------------|')
-print ('|   Age Min | Age Max |  # of Records | K  | Precision | Recall | F1 Measure | Accuracy |')
-print ('|---------------------------------------------------------------------------------------|')
+print ('|----------------------------------------------------------------------------------|')
+print ('|                             kNN Method (Manhattan/PCA)                           |')
+print ('|----------------------------------------------------------------------------------|')
+print ('|   Age Min | Age Max |  # of Records | Precision | Recall | F1 Measure | Accuracy |')
+print ('|----------------------------------------------------------------------------------|')
 
-dataX = study.flattenData(_appendThis='age')
+dataX = study.flattenData(_appendThis=None)
 
-transformer = KernelPCA(n_components=10, kernel='linear', degree=5, gamma=.1)
+transformer = KernelPCA(n_components=10, kernel='poly', degree=5, gamma=.1)
 
 # Split age groups
 ages = study.F[study.AGE_LINE,:].astype(int)
-(ageH, ageB) = np.histogram(ages, bins=AGE_GROUPS)
-for ageGroup in range(0, len(ageB)-1):
-    ageInd = np.where((ages>=ageB[ageGroup]) * (ages<ageB[ageGroup+1]))
+for ageGroup in range(0, len(AGE_GROUPS)-1):
+    # find records in this age group
+    ageInd = np.where((ages>=AGE_GROUPS[ageGroup]) * (ages<AGE_GROUPS[ageGroup+1]))
     ageInd = ageInd[0]
+
+    # split in trainig and validation
+    (trALL, teALL) = study.prepareCrossValidation(_trainPct=TRAIN_PCT, _allInd=ageInd)
+
+    # start training (exhaustive search)
     bestF1 = -1
     for n in NEIGHBORS:
-        (R, P, F1, A) = (0, 0, 1, 0)
-        classifier = KNeighborsClassifier(n_neighbors=n)
+        if n >= .05*len(ageInd):
+            continue
+        
+        classifier = KNeighborsClassifier(n_neighbors=n, metric='manhattan')
         for iter in range(0,ITERS):
-            (tr, te) = study.prepareCrossValidation(_trainPct=TRAIN_PCT, _allInd=ageInd)
+            # split initial training in training and testing
+            (tr, te) = study.prepareCrossValidation(_trainPct=TRAIN_PCT, _allInd=trALL)
+
             # assign labels
             indPtr = np.where(study.isActive[tr] == True)  # patients' index
             indPtr = indPtr[0]
             Labels = np.zeros((len(tr)))
             Labels[indPtr] = 1
+
             #
             # Method 4: PCA + kNN
             #
@@ -115,20 +127,24 @@ for ageGroup in range(0, len(ageB)-1):
             # predict & analyze
             X_transformed = transformer.fit_transform(np.transpose(dataX[:,te]))
             Z = classifier.predict(X_transformed)
-            (Pi, Ri, F1i, Ai) = study.classificationAnalysis(Z.astype(bool), te)
-
-            if F1i < F1:
-                P  = Pi
-                R  = Ri
-                F1 = F1i
-                A  = Ai
-        
-        if F1 > bestF1:
-            bestF1 = F1
-            bestR  = R
-            bestP  = P
-            bestA  = A
-            K      = n
+            (P, R, F1, A) = study.classificationAnalysis(Z.astype(bool), te)
+            
+            if F1 > bestF1:
+                bestF1  = F1
+                bestN   = n
+                bestInd = tr
     
-    print ('|   %7.1f | %7.1f | %13d | %2d | %9.2f | %6.2f | %10.2f | %8.2f |' % (ageB[ageGroup], ageB[ageGroup+1], len(ageInd), K, bestP, bestR, bestF1, bestA))
-print ('|---------------------------------------------------------------------------------------|')
+    # get the best trained model
+    indPtr = np.where(study.isActive[bestInd] == True)  # patients' index
+    indPtr = indPtr[0]
+    Labels = np.zeros((len(bestInd)))
+    Labels[indPtr] = 1
+    classifier = KNeighborsClassifier(n_neighbors=bestN, metric='manhattan')
+    classifier.fit(np.transpose(dataX[:,bestInd]), Labels)
+
+    # validate model
+    Z = classifier.predict(np.transpose(dataX[:,teALL]))
+    (P, R, F1, A) = study.classificationAnalysis(Z.astype(bool), teALL)
+    
+    print ('|   %7.1f | %7.1f | %13d | %9.2f | %6.2f | %10.2f | %8.2f |' % (AGE_GROUPS[ageGroup], AGE_GROUPS[ageGroup+1], len(ageInd), P, R, F1, A))
+print ('|----------------------------------------------------------------------------------|')

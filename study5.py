@@ -59,13 +59,13 @@ COLS_TO_USE = [
 SHEETS_TO_USE = 1
 
 # how many age groups to split
-AGE_GROUPS = [0,20,30,40,50,60,100]
+AGE_GROUPS = [0,20,40,65,100]
 
 # percentage of points to use for training (rest is for testing)
-TRAIN_PCT = .8
+TRAIN_PCT = .70
 
-ITERS = 20
-NEIGHBORS = [1,2,3,4,5,7,10,12,15,18,20]
+ITERS = 100
+NEIGHBORS = [1,2,3,4,5]
 
 study = theStudy()
 
@@ -80,29 +80,34 @@ for i in range(0, len(FILE_INPUT)):
 #
 # Start the experiments
 #
-print ('|---------------------------------------------------------------------------------------|')
-print ('|                             kNN Method (Manhattan, Weight)                            |')
-print ('|---------------------------------------------------------------------------------------|')
-print ('|   Age Min | Age Max |  # of Records |  K | Precision | Recall | F1 Measure | Accuracy |')
-print ('|---------------------------------------------------------------------------------------|')
+print ('|----------------------------------------------------------------------------------|')
+print ('|                         kNN Method (Weighted Minkowski)                          |')
+print ('|----------------------------------------------------------------------------------|')
+print ('|   Age Min | Age Max |  # of Records | Precision | Recall | F1 Measure | Accuracy |')
+print ('|----------------------------------------------------------------------------------|')
 
 dataX = study.flattenData(_appendThis=None)
 
 # Split age groups
 ages = study.F[study.AGE_LINE,:].astype(int)
-(ageH, ageB) = np.histogram(ages, bins=AGE_GROUPS)
-for ageGroup in range(0, len(ageB)-1):
-    ageInd = np.where((ages>=ageB[ageGroup]) * (ages<ageB[ageGroup+1]))
+for ageGroup in range(0, len(AGE_GROUPS)-1):
+    # find records in this age group
+    ageInd = np.where((ages>=AGE_GROUPS[ageGroup]) * (ages<AGE_GROUPS[ageGroup+1]))
     ageInd = ageInd[0]
+
+    # split in trainig and validation
+    (trALL, teALL) = study.prepareCrossValidation(_trainPct=TRAIN_PCT, _allInd=ageInd)
+
+    # start training (exhaustive search)
     bestF1 = -1
     for n in NEIGHBORS:
-        if n >= .1*len(ageInd):
+        if n >= .05*len(ageInd):
             continue
-
-        (R, P, F1, A) = (0, 0, 1, 0)
+        
         for iter in range(0,ITERS):
-            (tr, te) = study.prepareCrossValidation(_trainPct=TRAIN_PCT, _allInd=ageInd)
-            
+            # split initial training in training and testing
+            (tr, te) = study.prepareCrossValidation(_trainPct=TRAIN_PCT, _allInd=trALL)
+
             # get weights
             [v, e] = np.linalg.eig(np.cov(dataX[:,tr]))
             v = np.abs(v)
@@ -121,26 +126,20 @@ for ageGroup in range(0, len(ageB)-1):
             Labels[indPtr] = 1
 
             #
-            # Method 3: kNN
+            # Method 5: kNN
             #
             classifier.fit(np.transpose(dataX[:,tr]), Labels)
 
             # predict & analyze
             Z = classifier.predict(np.transpose(dataX[:,te]))
-            (Pi, Ri, F1i, Ai) = study.classificationAnalysis(Z.astype(bool), te)
-
-            if F1i < F1:
-                P  = Pi
-                R  = Ri
-                F1 = F1i
-                A  = Ai
-        
-        if F1 > bestF1:
-            bestF1 = F1
-            bestR  = R
-            bestP  = P
-            bestA  = A
-            K      = n
+            (P, R, F1, A) = study.classificationAnalysis(Z.astype(bool), te)
+            
+            if F1 > bestF1:
+                bestClassifier = classifier
     
-    print ('|   %7.1f | %7.1f | %13d | %2d | %9.2f | %6.2f | %10.2f | %8.2f |' % (ageB[ageGroup], ageB[ageGroup+1], len(ageInd), K, bestP, bestR, bestF1, bestA))
-print ('|---------------------------------------------------------------------------------------|')
+    # validate model
+    Z = bestClassifier.predict(np.transpose(dataX[:,teALL]))
+    (P, R, F1, A) = study.classificationAnalysis(Z.astype(bool), teALL)
+    
+    print ('|   %7.1f | %7.1f | %13d | %9.2f | %6.2f | %10.2f | %8.2f |' % (AGE_GROUPS[ageGroup], AGE_GROUPS[ageGroup+1], len(ageInd), P, R, F1, A))
+print ('|----------------------------------------------------------------------------------|')

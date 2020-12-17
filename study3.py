@@ -64,8 +64,8 @@ AGE_GROUPS = [0,20,40,65,100]
 # percentage of points to use for training (rest is for testing)
 TRAIN_PCT = .70
 
-ITERS = 50
-NEIGHBORS = [1,2,3,4,5,7,8,9,10]
+ITERS = 100
+NEIGHBORS = [1,2,3,4,5]
 
 study = theStudy()
 

@@ -59,14 +59,13 @@ COLS_TO_USE = [
 SHEETS_TO_USE = 1
 
 # how many age groups to split
-AGE_GROUPS = [0,20,30,40,50,60,100]
+AGE_GROUPS = [0,20,40,65,100]
 
 # percentage of points to use for training (rest is for testing)
-TRAIN_PCT = .95
+TRAIN_PCT = .70
 
-ITERS = 10
-
-K = 10
+ITERS = 100
+GROUPS_K = [5,7,10,12]
 
 study = theStudy()
 
@@ -75,58 +74,88 @@ study = theStudy()
 #
 for i in range(0, len(FILE_INPUT)):
     study.readTable(_path=FILE_INPUT[i], _colsToRead=COLS_TO_USE[i], _sheetToRead=SHEETS_TO_USE, 
-    _doAppend=True, _doFilterData=True)
+    _doAppend=True, 
+    _doFilterData=False, _doNormalize=True)
 
 #
 # Start the experiments
 #
-print ('|---------------------------------------------------------------------------------------|')
-print ('|                                       GMM Method                                      |')
-print ('|---------------------------------------------------------------------------------------|')
-print ('|   Age Min | Age Max |  # of Records | K  | Precision | Recall | F1 Measure | Accuracy |')
-print ('|---------------------------------------------------------------------------------------|')
+print ('|----------------------------------------------------------------------------------|')
+print ('|                                 PDF Fitting                                      |')
+print ('|----------------------------------------------------------------------------------|')
+print ('|   Age Min | Age Max |  # of Records | Precision | Recall | F1 Measure | Accuracy |')
+print ('|----------------------------------------------------------------------------------|')
 
 dataX = study.flattenData(_appendThis=None)
 
 # Split age groups
-ages = study.F[study.AGE_LINE,:].astype(int);
-(ageH, ageB) = np.histogram(ages, bins=AGE_GROUPS)
-for ageGroup in range(0, len(ageB)-1):
-    ageInd = np.where((ages>=ageB[ageGroup]) * (ages<ageB[ageGroup+1]))
+ages = study.F[study.AGE_LINE,:].astype(int)
+for ageGroup in range(0, len(AGE_GROUPS)-1):
+    # find records in this age group
+    ageInd = np.where((ages>=AGE_GROUPS[ageGroup]) * (ages<AGE_GROUPS[ageGroup+1]))
     ageInd = ageInd[0]
-    (R, P, F1, A) = (0, 0, 1, 0)
-    for iter in range(0,ITERS):
-        (tr, te) = study.prepareCrossValidation(_trainPct=TRAIN_PCT, _allInd=ageInd)
-        # get two groups (Patients & Healthy) - TRAINING
-        indPtr = np.where(study.isActive[tr] == True)  # patients' index
-        indPtr = indPtr[0]
-        indHtr = np.where(study.isPatient[tr] == False) # healthy index
-        indHtr = indHtr[0]
+
+    # split in trainig and validation
+    (trALL, teALL) = study.prepareCrossValidation(_trainPct=TRAIN_PCT, _allInd=ageInd)
+
+    # start training (exhaustive search)
+    bestF1 = -1
+    for n in GROUPS_K:
+        if n >= .05*len(ageInd):
+            continue
+
+        gmmP = mixture.GaussianMixture(n_components=2)
+        gmmH = mixture.GaussianMixture(n_components=n)
+        for iter in range(0,ITERS):
+            # split initial training in training and testing
+            (tr, te) = study.prepareCrossValidation(_trainPct=TRAIN_PCT, _allInd=trALL)
+
+            # get two groups (Patients & Healthy) - TRAINING
+            indPtr = np.where(study.isActive[tr] == True)  # patients' index
+            indPtr = indPtr[0]
+            indHtr = np.where(study.isPatient[tr] == False) # healthy index
+            indHtr = indHtr[0]
         
-        #
-        # Method 1: GMM
-        #
+            #
+            # Method 1: GMM (fit pdf)
+            #
 
-        # Learn patients patterns
-        gmmP = mixture.GaussianMixture(n_components=K)
-        gmmP.fit(np.transpose(dataX[:,indPtr]))
+            # Learn patients patterns
+            gmmP.fit(np.transpose(dataX[:,indPtr]))
 
-        # Learn healthy patterns
-        gmmH = mixture.GaussianMixture(n_components=K)
-        gmmH.fit(np.transpose(dataX[:,indHtr]))
+            # Learn healthy patterns
+            gmmH.fit(np.transpose(dataX[:,indHtr]))
 
-        # analysis on healthy patterns
-        p1 = gmmP.score_samples(np.transpose(dataX[:,te])) # test against patients' model
-        p2 = gmmH.score_samples(np.transpose(dataX[:,te])) # test against healthy model
-        Z = p1 > p2 # get the computed label (if True -> Patient)
-
-        (Pi, Ri, F1i, Ai) = study.classificationAnalysis(Z, te)
-
-        if F1i < F1:
-            P  = Pi
-            R  = Ri
-            F1 = F1i
-            A  = Ai
+            # predict & analyze
+            p1 = gmmP.score_samples(np.transpose(dataX[:,te])) # test against patients' model
+            p2 = gmmH.score_samples(np.transpose(dataX[:,te])) # test against healthy model
+            Z = p1 > p2 # get the computed label (if True -> Patient)
+            
+            (P, R, F1, A) = study.classificationAnalysis(Z.astype(bool), te)
+            if F1 > bestF1:
+                bestF1  = F1
+                bestN   = n
+                bestInd = tr
     
-    print ('|   %7.1f | %7.1f | %13d | %2d | %9.2f | %6.2f | %10.2f | %8.2f |' % (ageB[ageGroup], ageB[ageGroup+1], len(ageInd), K, P, R, F1, A))
-print ('|---------------------------------------------------------------------------------------|')
+    # get the best trained model
+    indPtr = np.where(study.isActive[bestInd] == True)  # patients' index
+    indPtr = indPtr[0]
+    indHtr = np.where(study.isPatient[bestInd] == False) # healthy index
+    indHtr = indHtr[0]
+
+    gmmP = mixture.GaussianMixture(n_components=2)
+    gmmH = mixture.GaussianMixture(n_components=bestN)
+    # Learn patients patterns
+    gmmP.fit(np.transpose(dataX[:,indPtr]))
+
+    # Learn healthy patterns
+    gmmH.fit(np.transpose(dataX[:,indHtr]))
+
+    # validate model
+    p1 = gmmP.score_samples(np.transpose(dataX[:,teALL])) # test against patients' model
+    p2 = gmmH.score_samples(np.transpose(dataX[:,teALL])) # test against healthy model
+    Z = p1 > p2 # get the computed label (if True -> Patient)
+    (P, R, F1, A) = study.classificationAnalysis(Z.astype(bool), teALL)
+    
+    print ('|   %7.1f | %7.1f | %13d | %9.2f | %6.2f | %10.2f | %8.2f |' % (AGE_GROUPS[ageGroup], AGE_GROUPS[ageGroup+1], len(ageInd), P, R, F1, A))
+print ('|----------------------------------------------------------------------------------|')

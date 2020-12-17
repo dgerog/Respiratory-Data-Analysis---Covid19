@@ -1,3 +1,4 @@
+
 from theStudy import *
 
 from sklearn import mixture
@@ -59,14 +60,12 @@ COLS_TO_USE = [
 SHEETS_TO_USE = 1
 
 # how many age groups to split
-AGE_GROUPS = [0,20,30,40,50,60,100]
+AGE_GROUPS = [0,20,40,65,100]
 
 # percentage of points to use for training (rest is for testing)
-TRAIN_PCT = .95
+TRAIN_PCT = .70
 
-ITERS = 10
-
-K = 10
+ITERS = 100
 
 study = theStudy()
 
@@ -75,57 +74,64 @@ study = theStudy()
 #
 for i in range(0, len(FILE_INPUT)):
     study.readTable(_path=FILE_INPUT[i], _colsToRead=COLS_TO_USE[i], _sheetToRead=SHEETS_TO_USE, 
-    _doAppend=True, _doFilterData=True)
+    _doAppend=True, 
+    _doFilterData=False, _doNormalize=True)
 
 #
 # Start the experiments
 #
-print ('|---------------------------------------------------------------------------------------|')
-print ('|                                       GMM Method                                      |')
-print ('|---------------------------------------------------------------------------------------|')
-print ('|   Age Min | Age Max |  # of Records | K  | Precision | Recall | F1 Measure | Accuracy |')
-print ('|---------------------------------------------------------------------------------------|')
+print ('|----------------------------------------------------------------------------------|')
+print ('|                                       GMM                                        |')
+print ('|----------------------------------------------------------------------------------|')
+print ('|   Age Min | Age Max |  # of Records | Precision | Recall | F1 Measure | Accuracy |')
+print ('|----------------------------------------------------------------------------------|')
 
 dataX = study.flattenData(_appendThis=None)
 
 # Split age groups
-ages = study.F[study.AGE_LINE,:].astype(int);
-(ageH, ageB) = np.histogram(ages, bins=AGE_GROUPS)
-for ageGroup in range(0, len(ageB)-1):
-    ageInd = np.where((ages>=ageB[ageGroup]) * (ages<ageB[ageGroup+1]))
+ages = study.F[study.AGE_LINE,:].astype(int)
+for ageGroup in range(0, len(AGE_GROUPS)-1):
+    # find records in this age group
+    ageInd = np.where((ages>=AGE_GROUPS[ageGroup]) * (ages<AGE_GROUPS[ageGroup+1]))
     ageInd = ageInd[0]
-    (R, P, F1, A) = (0, 0, 1, 0)
+
+    # split in trainig and validation
+    (trALL, teALL) = study.prepareCrossValidation(_trainPct=TRAIN_PCT, _allInd=ageInd)
+
+    # start training (exhaustive search)
+    bestF1 = -1
     for iter in range(0,ITERS):
-        (tr, te) = study.prepareCrossValidation(_trainPct=TRAIN_PCT, _allInd=ageInd)
-        
+        # split initial training in training and testing
+        (tr, te) = study.prepareCrossValidation(_trainPct=TRAIN_PCT, _allInd=trALL)
+
         # get two groups (Patients & Healthy) - TRAINING
         indPtr = np.where(study.isActive[tr] == True)  # patients' index
         indPtr = indPtr[0]
         indHtr = np.where(study.isPatient[tr] == False) # healthy index
         indHtr = indHtr[0]
 
+        #
+        # Method 6: GMM
+        #
         gmm = mixture.GaussianMixture(
             n_components=2, 
             means_init=[
-                np.transpose(np.mean(dataX[:,indHtr], axis=1)),
-                np.transpose(np.mean(dataX[:,indPtr], axis=1)),
-            ]
+                    np.transpose(np.mean(dataX[:,indHtr], axis=1)),
+                    np.transpose(np.mean(dataX[:,indPtr], axis=1)),
+                ]
         )
+        gmm.fit(np.transpose(dataX[:,tr]))
 
-        #
-        # Method 1: GMM
-        #
-        gmm.fit(np.transpose(dataX[:,indPtr]))
-
-        # analysis on healthy patterns
+        # predict & analyze
         Z = gmm.predict(np.transpose(dataX[:,te]))
-        (Pi, Ri, F1i, Ai) = study.classificationAnalysis(Z.astype(bool), te)
+        (P, R, F1, A) = study.classificationAnalysis(Z.astype(bool), te)
         
-        if F1i < F1:
-            P  = Pi
-            R  = Ri
-            F1 = F1i
-            A  = Ai
+        if F1 > bestF1:
+            bestGMM = gmm
     
-    print ('|   %7.1f | %7.1f | %13d | %2d | %9.2f | %6.2f | %10.2f | %8.2f |' % (ageB[ageGroup], ageB[ageGroup+1], len(ageInd), K, P, R, F1, A))
-print ('|---------------------------------------------------------------------------------------|')
+    # validate model
+    Z = bestGMM.predict(np.transpose(dataX[:,teALL]))
+    (P, R, F1, A) = study.classificationAnalysis(Z.astype(bool), teALL)
+    
+    print ('|   %7.1f | %7.1f | %13d | %9.2f | %6.2f | %10.2f | %8.2f |' % (AGE_GROUPS[ageGroup], AGE_GROUPS[ageGroup+1], len(ageInd), P, R, F1, A))
+print ('|----------------------------------------------------------------------------------|')
