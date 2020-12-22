@@ -27,6 +27,8 @@ FILE_INPUT = [
 './data/mass_spectra_2020_09_13.xlsx',
 './data/mass_spectra_2020_09_14.xlsx',
 './data/mass_spectra_2020_11_11.xlsx',
+'./data/mass_spectra_2020_11_09.xlsx',
+'./data/mass_spectra_2020_11_10.xlsx',
 ]
 STORAGE_DIR = 'results/'
 
@@ -53,7 +55,9 @@ COLS_TO_USE = [
     "B:T",
     "B:R",
     "B:DW",
-    "B:BK"
+    "B:BK",
+    "B:BE",
+    "B:BN"
 ]
 
 # which sheet to use
@@ -65,7 +69,7 @@ AGE_GROUPS = [0,20,40,65,100]
 # percentage of points to use for training (rest is for testing)
 TRAIN_PCT = .70
 
-ITERS = 100
+ITERS = 20
 NEIGHBORS = [1,2,3,4,5]
 
 study = theStudy()
@@ -76,7 +80,7 @@ study = theStudy()
 for i in range(0, len(FILE_INPUT)):
     study.readTable(_path=FILE_INPUT[i], _colsToRead=COLS_TO_USE[i], _sheetToRead=SHEETS_TO_USE, 
     _doAppend=True, 
-    _doFilterData=False, _doNormalize=True)
+    _doFilterData=True, _doNormalize=True)
 
 #
 # Start the experiments
@@ -133,6 +137,11 @@ for ageGroup in range(0, len(AGE_GROUPS)-1):
                 bestF1  = F1
                 bestN   = n
                 bestInd = tr
+
+                if ageGroup == len(AGE_GROUPS)-2:
+                    #keep the model for the oldest age group
+                    oldestN = n
+                    oldestInd = tr
     
     # get the best trained model
     indPtr = np.where(study.isActive[bestInd] == True)  # patients' index
@@ -146,5 +155,24 @@ for ageGroup in range(0, len(AGE_GROUPS)-1):
     Z = classifier.predict(np.transpose(dataX[:,teALL]))
     (P, R, F1, A) = study.classificationAnalysis(Z.astype(bool), teALL)
     
+    print ('|   %7.1f | %7.1f | %13d | %9.2f | %6.2f | %10.2f | %8.2f |' % (AGE_GROUPS[ageGroup], AGE_GROUPS[ageGroup+1], len(ageInd), P, R, F1, A))
+print ('|----------------------------------------------------------------------------------|')
+
+#
+# Check the model fit on oldest group with other age groups
+#
+indPtr = np.where(study.isActive[oldestInd] == True)  # patients' index
+indPtr = indPtr[0]
+Labels = np.zeros((len(oldestInd)))
+Labels[indPtr] = 1
+classifier.fit(np.transpose(dataX[:,oldestInd]), Labels)
+for ageGroup in range(0, len(AGE_GROUPS)-1):
+    # find records in this age group
+    ageInd = np.where((ages>=AGE_GROUPS[ageGroup]) * (ages<AGE_GROUPS[ageGroup+1]))
+    ageInd = ageInd[0]
+
+    # validate model
+    Z = classifier.predict(np.transpose(dataX[:,ageInd]))
+    (P, R, F1, A) = study.classificationAnalysis(Z.astype(bool), ageInd)
     print ('|   %7.1f | %7.1f | %13d | %9.2f | %6.2f | %10.2f | %8.2f |' % (AGE_GROUPS[ageGroup], AGE_GROUPS[ageGroup+1], len(ageInd), P, R, F1, A))
 print ('|----------------------------------------------------------------------------------|')

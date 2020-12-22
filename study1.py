@@ -26,6 +26,8 @@ FILE_INPUT = [
 './data/mass_spectra_2020_09_13.xlsx',
 './data/mass_spectra_2020_09_14.xlsx',
 './data/mass_spectra_2020_11_11.xlsx',
+'./data/mass_spectra_2020_11_09.xlsx',
+'./data/mass_spectra_2020_11_10.xlsx',
 ]
 STORAGE_DIR = 'results/'
 
@@ -52,7 +54,9 @@ COLS_TO_USE = [
     "B:T",
     "B:R",
     "B:DW",
-    "B:BK"
+    "B:BK",
+    "B:BE",
+    "B:BN"
 ]
 
 # which sheet to use
@@ -64,7 +68,7 @@ AGE_GROUPS = [0,20,40,65,100]
 # percentage of points to use for training (rest is for testing)
 TRAIN_PCT = .70
 
-ITERS = 100
+ITERS = 20
 GROUPS_K = [5,7,10,12]
 
 study = theStudy()
@@ -75,7 +79,7 @@ study = theStudy()
 for i in range(0, len(FILE_INPUT)):
     study.readTable(_path=FILE_INPUT[i], _colsToRead=COLS_TO_USE[i], _sheetToRead=SHEETS_TO_USE, 
     _doAppend=True, 
-    _doFilterData=False, _doNormalize=True)
+    _doFilterData=True, _doNormalize=True)
 
 #
 # Start the experiments
@@ -86,7 +90,7 @@ print ('|-----------------------------------------------------------------------
 print ('|   Age Min | Age Max |  # of Records | Precision | Recall | F1 Measure | Accuracy |')
 print ('|----------------------------------------------------------------------------------|')
 
-dataX = study.flattenData(_appendThis=None)
+dataX = study.flattenData(_appendThis='age')
 
 # Split age groups
 ages = study.F[study.AGE_LINE,:].astype(int)
@@ -136,7 +140,12 @@ for ageGroup in range(0, len(AGE_GROUPS)-1):
                 bestF1  = F1
                 bestN   = n
                 bestInd = tr
-    
+
+                if ageGroup == len(AGE_GROUPS)-2:
+                    #keep the model for the oldest age group
+                    oldestN = n
+                    oldestInd = tr
+        
     # get the best trained model
     indPtr = np.where(study.isActive[bestInd] == True)  # patients' index
     indPtr = indPtr[0]
@@ -157,5 +166,30 @@ for ageGroup in range(0, len(AGE_GROUPS)-1):
     Z = p1 > p2 # get the computed label (if True -> Patient)
     (P, R, F1, A) = study.classificationAnalysis(Z.astype(bool), teALL)
     
+    print ('|   %7.1f | %7.1f | %13d | %9.2f | %6.2f | %10.2f | %8.2f |' % (AGE_GROUPS[ageGroup], AGE_GROUPS[ageGroup+1], len(ageInd), P, R, F1, A))
+print ('|----------------------------------------------------------------------------------|')
+
+
+#
+# Check the model fit on oldest group with other age groups
+#
+gmmP = mixture.GaussianMixture(n_components=2)
+gmmH = mixture.GaussianMixture(n_components=oldestN)
+indPtr = np.where(study.isActive[oldestInd] == True)  # patients' index
+indPtr = indPtr[0]
+indHtr = np.where(study.isPatient[oldestInd] == False) # healthy index
+indHtr = indHtr[0]
+gmmP.fit(np.transpose(dataX[:,indPtr]))
+gmmH.fit(np.transpose(dataX[:,indHtr]))
+for ageGroup in range(0, len(AGE_GROUPS)-1):
+    # find records in this age group
+    ageInd = np.where((ages>=AGE_GROUPS[ageGroup]) * (ages<AGE_GROUPS[ageGroup+1]))
+    ageInd = ageInd[0]
+
+    # validate model
+    p1 = gmmP.score_samples(np.transpose(dataX[:,ageInd])) # test against patients' model
+    p2 = gmmH.score_samples(np.transpose(dataX[:,ageInd])) # test against healthy model
+    Z = p1 > p2 # get the computed label (if True -> Patient)
+    (P, R, F1, A) = study.classificationAnalysis(Z.astype(bool), ageInd)
     print ('|   %7.1f | %7.1f | %13d | %9.2f | %6.2f | %10.2f | %8.2f |' % (AGE_GROUPS[ageGroup], AGE_GROUPS[ageGroup+1], len(ageInd), P, R, F1, A))
 print ('|----------------------------------------------------------------------------------|')
