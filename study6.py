@@ -2,6 +2,7 @@
 from theStudy import *
 
 from sklearn import mixture
+import copy 
 
 # in file
 FILE_INPUT = [
@@ -94,6 +95,7 @@ dataX = study.flattenData(_appendThis=None)
 
 # Split age groups
 ages = study.F[study.AGE_LINE,:].astype(int)
+bestClassifier = ()
 for ageGroup in range(0, len(AGE_GROUPS)-1):
     # find records in this age group
     ageInd = np.where((ages>=AGE_GROUPS[ageGroup]) * (ages<AGE_GROUPS[ageGroup+1]))
@@ -131,29 +133,60 @@ for ageGroup in range(0, len(AGE_GROUPS)-1):
         (P, R, F1, A) = study.classificationAnalysis(Z.astype(bool), te)
         
         if F1 > bestF1:
-            bestGMM = gmm
-
-            if ageGroup == len(AGE_GROUPS)-2:
-                #keep the model for the oldest age group
-                oldestGMM = gmm
+            bestC = gmm
+    bestClassifier = bestClassifier + (copy.deepcopy(bestC),)
 
     # validate model
-    Z = bestGMM.predict(np.transpose(dataX[:,teALL]))
+    Z = bestClassifier[ageGroup].predict(np.transpose(dataX[:,teALL]))
     (P, R, F1, A) = study.classificationAnalysis(Z.astype(bool), teALL)
-    
     print ('|   %7.1f | %7.1f | %13d | %9.2f | %6.2f | %10.2f | %8.2f |' % (AGE_GROUPS[ageGroup], AGE_GROUPS[ageGroup+1], len(ageInd), P, R, F1, A))
 print ('|----------------------------------------------------------------------------------|')
 
-#
-# Check the model fit on oldest group with other age groups
-#
+# Knowledge transfer
+ageGroupModel = len(AGE_GROUPS)-2 # use the one trained in the oldest group
 for ageGroup in range(0, len(AGE_GROUPS)-1):
     # find records in this age group
     ageInd = np.where((ages>=AGE_GROUPS[ageGroup]) * (ages<AGE_GROUPS[ageGroup+1]))
     ageInd = ageInd[0]
 
     # validate model
-    Z = oldestGMM.predict(np.transpose(dataX[:,ageInd]))
+    Z = bestClassifier[ageGroupModel].predict(np.transpose(dataX[:,ageInd]))
+    (P, R, F1, A) = study.classificationAnalysis(Z.astype(bool), ageInd)
+    print ('|   %7.1f | %7.1f | %13d | %9.2f | %6.2f | %10.2f | %8.2f |' % (AGE_GROUPS[ageGroup], AGE_GROUPS[ageGroup+1], len(ageInd), P, R, F1, A))
+print ('|----------------------------------------------------------------------------------|')
+
+ageGroupModel = 0 # use the one trained in the youngest group
+for ageGroup in range(0, len(AGE_GROUPS)-1):
+    # find records in this age group
+    ageInd = np.where((ages>=AGE_GROUPS[ageGroup]) * (ages<AGE_GROUPS[ageGroup+1]))
+    ageInd = ageInd[0]
+
+    # validate model
+    Z = bestClassifier[ageGroupModel].predict(np.transpose(dataX[:,ageInd]))
+    (P, R, F1, A) = study.classificationAnalysis(Z.astype(bool), ageInd)
+    print ('|   %7.1f | %7.1f | %13d | %9.2f | %6.2f | %10.2f | %8.2f |' % (AGE_GROUPS[ageGroup], AGE_GROUPS[ageGroup+1], len(ageInd), P, R, F1, A))
+print ('|----------------------------------------------------------------------------------|')
+
+ageGroupModel = 1 # use the one trained in the second youngest group
+for ageGroup in range(0, len(AGE_GROUPS)-1):
+    # find records in this age group
+    ageInd = np.where((ages>=AGE_GROUPS[ageGroup]) * (ages<AGE_GROUPS[ageGroup+1]))
+    ageInd = ageInd[0]
+
+    # validate model
+    Z = bestClassifier[ageGroupModel].predict(np.transpose(dataX[:,ageInd]))
+    (P, R, F1, A) = study.classificationAnalysis(Z.astype(bool), ageInd)
+    print ('|   %7.1f | %7.1f | %13d | %9.2f | %6.2f | %10.2f | %8.2f |' % (AGE_GROUPS[ageGroup], AGE_GROUPS[ageGroup+1], len(ageInd), P, R, F1, A))
+print ('|----------------------------------------------------------------------------------|')
+
+ageGroupModel = 2 # use the one trained in the third youngest group
+for ageGroup in range(0, len(AGE_GROUPS)-1):
+    # find records in this age group
+    ageInd = np.where((ages>=AGE_GROUPS[ageGroup]) * (ages<AGE_GROUPS[ageGroup+1]))
+    ageInd = ageInd[0]
+
+    # validate model
+    Z = bestClassifier[ageGroupModel].predict(np.transpose(dataX[:,ageInd]))
     (P, R, F1, A) = study.classificationAnalysis(Z.astype(bool), ageInd)
     print ('|   %7.1f | %7.1f | %13d | %9.2f | %6.2f | %10.2f | %8.2f |' % (AGE_GROUPS[ageGroup], AGE_GROUPS[ageGroup+1], len(ageInd), P, R, F1, A))
 print ('|----------------------------------------------------------------------------------|')

@@ -1,6 +1,7 @@
 from theStudy import *
 
 from sklearn import mixture
+import copy 
 
 # in file
 FILE_INPUT = [
@@ -69,7 +70,7 @@ AGE_GROUPS = [0,20,40,65,100]
 TRAIN_PCT = .70
 
 ITERS = 20
-GROUPS_K = [5,7,10,12]
+GROUPS_K = [5,7,9,11,13]
 
 study = theStudy()
 
@@ -90,10 +91,11 @@ print ('|-----------------------------------------------------------------------
 print ('|   Age Min | Age Max |  # of Records | Precision | Recall | F1 Measure | Accuracy |')
 print ('|----------------------------------------------------------------------------------|')
 
-dataX = study.flattenData(_appendThis='age')
+dataX = study.flattenData(_appendThis=None)
 
 # Split age groups
 ages = study.F[study.AGE_LINE,:].astype(int)
+bestClassifier = ()
 for ageGroup in range(0, len(AGE_GROUPS)-1):
     # find records in this age group
     ageInd = np.where((ages>=AGE_GROUPS[ageGroup]) * (ages<AGE_GROUPS[ageGroup+1]))
@@ -138,57 +140,74 @@ for ageGroup in range(0, len(AGE_GROUPS)-1):
             (P, R, F1, A) = study.classificationAnalysis(Z.astype(bool), te)
             if F1 > bestF1:
                 bestF1  = F1
-                bestN   = n
-                bestInd = tr
-
-                if ageGroup == len(AGE_GROUPS)-2:
-                    #keep the model for the oldest age group
-                    oldestN = n
-                    oldestInd = tr
-        
-    # get the best trained model
-    indPtr = np.where(study.isActive[bestInd] == True)  # patients' index
-    indPtr = indPtr[0]
-    indHtr = np.where(study.isPatient[bestInd] == False) # healthy index
-    indHtr = indHtr[0]
-
-    gmmP = mixture.GaussianMixture(n_components=2)
-    gmmH = mixture.GaussianMixture(n_components=bestN)
-    # Learn patients patterns
-    gmmP.fit(np.transpose(dataX[:,indPtr]))
-
-    # Learn healthy patterns
-    gmmH.fit(np.transpose(dataX[:,indHtr]))
+                bestC = {"patient":gmmP, "healthy":gmmH}
+    bestClassifier = bestClassifier + (copy.deepcopy(bestC),)
 
     # validate model
-    p1 = gmmP.score_samples(np.transpose(dataX[:,teALL])) # test against patients' model
-    p2 = gmmH.score_samples(np.transpose(dataX[:,teALL])) # test against healthy model
+    p1 = bestClassifier[ageGroup]["patient"].score_samples(np.transpose(dataX[:,teALL])) # test against patients' model
+    p2 = bestClassifier[ageGroup]["healthy"].score_samples(np.transpose(dataX[:,teALL])) # test against healthy model
     Z = p1 > p2 # get the computed label (if True -> Patient)
     (P, R, F1, A) = study.classificationAnalysis(Z.astype(bool), teALL)
     
     print ('|   %7.1f | %7.1f | %13d | %9.2f | %6.2f | %10.2f | %8.2f |' % (AGE_GROUPS[ageGroup], AGE_GROUPS[ageGroup+1], len(ageInd), P, R, F1, A))
 print ('|----------------------------------------------------------------------------------|')
 
-
-#
-# Check the model fit on oldest group with other age groups
-#
-gmmP = mixture.GaussianMixture(n_components=2)
-gmmH = mixture.GaussianMixture(n_components=oldestN)
-indPtr = np.where(study.isActive[oldestInd] == True)  # patients' index
-indPtr = indPtr[0]
-indHtr = np.where(study.isPatient[oldestInd] == False) # healthy index
-indHtr = indHtr[0]
-gmmP.fit(np.transpose(dataX[:,indPtr]))
-gmmH.fit(np.transpose(dataX[:,indHtr]))
+# Knowledge transfer
+ageGroupModelP = len(AGE_GROUPS)-2 
+ageGroupModelH = len(AGE_GROUPS)-2
 for ageGroup in range(0, len(AGE_GROUPS)-1):
     # find records in this age group
     ageInd = np.where((ages>=AGE_GROUPS[ageGroup]) * (ages<AGE_GROUPS[ageGroup+1]))
     ageInd = ageInd[0]
 
     # validate model
-    p1 = gmmP.score_samples(np.transpose(dataX[:,ageInd])) # test against patients' model
-    p2 = gmmH.score_samples(np.transpose(dataX[:,ageInd])) # test against healthy model
+    p1 = bestClassifier[ageGroupModelP]["patient"].score_samples(np.transpose(dataX[:,teALL])) # test against patients' model
+    p2 = bestClassifier[ageGroupModelH]["healthy"].score_samples(np.transpose(dataX[:,teALL])) # test against healthy model
+    Z = p1 > p2 # get the computed label (if True -> Patient)
+    (P, R, F1, A) = study.classificationAnalysis(Z.astype(bool), ageInd)
+    print ('|   %7.1f | %7.1f | %13d | %9.2f | %6.2f | %10.2f | %8.2f |' % (AGE_GROUPS[ageGroup], AGE_GROUPS[ageGroup+1], len(ageInd), P, R, F1, A))
+print ('|----------------------------------------------------------------------------------|')
+
+ageGroupModelP = 0
+ageGroupModelH = 0
+for ageGroup in range(0, len(AGE_GROUPS)-1):
+    # find records in this age group
+    ageInd = np.where((ages>=AGE_GROUPS[ageGroup]) * (ages<AGE_GROUPS[ageGroup+1]))
+    ageInd = ageInd[0]
+
+    # validate model
+    p1 = bestClassifier[ageGroupModelP]["patient"].score_samples(np.transpose(dataX[:,teALL])) # test against patients' model
+    p2 = bestClassifier[ageGroupModelH]["healthy"].score_samples(np.transpose(dataX[:,teALL])) # test against healthy model
+    Z = p1 > p2 # get the computed label (if True -> Patient)
+    (P, R, F1, A) = study.classificationAnalysis(Z.astype(bool), ageInd)
+    print ('|   %7.1f | %7.1f | %13d | %9.2f | %6.2f | %10.2f | %8.2f |' % (AGE_GROUPS[ageGroup], AGE_GROUPS[ageGroup+1], len(ageInd), P, R, F1, A))
+print ('|----------------------------------------------------------------------------------|')
+
+ageGroupModelP = len(AGE_GROUPS)-2 
+ageGroupModelH = 0
+for ageGroup in range(0, len(AGE_GROUPS)-1):
+    # find records in this age group
+    ageInd = np.where((ages>=AGE_GROUPS[ageGroup]) * (ages<AGE_GROUPS[ageGroup+1]))
+    ageInd = ageInd[0]
+
+    # validate model
+    p1 = bestClassifier[ageGroupModelP]["patient"].score_samples(np.transpose(dataX[:,teALL])) # test against patients' model
+    p2 = bestClassifier[ageGroupModelH]["healthy"].score_samples(np.transpose(dataX[:,teALL])) # test against healthy model
+    Z = p1 > p2 # get the computed label (if True -> Patient)
+    (P, R, F1, A) = study.classificationAnalysis(Z.astype(bool), ageInd)
+    print ('|   %7.1f | %7.1f | %13d | %9.2f | %6.2f | %10.2f | %8.2f |' % (AGE_GROUPS[ageGroup], AGE_GROUPS[ageGroup+1], len(ageInd), P, R, F1, A))
+print ('|----------------------------------------------------------------------------------|')
+
+ageGroupModelP = 2 
+ageGroupModelH = 1
+for ageGroup in range(0, len(AGE_GROUPS)-1):
+    # find records in this age group
+    ageInd = np.where((ages>=AGE_GROUPS[ageGroup]) * (ages<AGE_GROUPS[ageGroup+1]))
+    ageInd = ageInd[0]
+
+    # validate model
+    p1 = bestClassifier[ageGroupModelP]["patient"].score_samples(np.transpose(dataX[:,teALL])) # test against patients' model
+    p2 = bestClassifier[ageGroupModelH]["healthy"].score_samples(np.transpose(dataX[:,teALL])) # test against healthy model
     Z = p1 > p2 # get the computed label (if True -> Patient)
     (P, R, F1, A) = study.classificationAnalysis(Z.astype(bool), ageInd)
     print ('|   %7.1f | %7.1f | %13d | %9.2f | %6.2f | %10.2f | %8.2f |' % (AGE_GROUPS[ageGroup], AGE_GROUPS[ageGroup+1], len(ageInd), P, R, F1, A))

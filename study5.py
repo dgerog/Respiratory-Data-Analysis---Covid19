@@ -1,6 +1,7 @@
 from theStudy import *
 
 from sklearn.neighbors import KNeighborsClassifier
+import copy 
 
 # in file
 FILE_INPUT = [
@@ -92,8 +93,15 @@ print ('|-----------------------------------------------------------------------
 
 dataX = study.flattenData(_appendThis=None)
 
+# Labels
+indPtr = np.where(study.isActive == True)  # patients' index
+indPtr = indPtr[0]
+Labels = np.zeros(study.X.shape[1])
+Labels[indPtr] = 1
+
 # Split age groups
 ages = study.F[study.AGE_LINE,:].astype(int)
+bestClassifier = ()
 for ageGroup in range(0, len(AGE_GROUPS)-1):
     # find records in this age group
     ageInd = np.where((ages>=AGE_GROUPS[ageGroup]) * (ages<AGE_GROUPS[ageGroup+1]))
@@ -108,10 +116,14 @@ for ageGroup in range(0, len(AGE_GROUPS)-1):
         if n >= .05*len(ageInd):
             continue
         
+        classifier = KNeighborsClassifier(n_neighbors=n, metric='manhattan')
         for iter in range(0,ITERS):
             # split initial training in training and testing
             (tr, te) = study.prepareCrossValidation(_trainPct=TRAIN_PCT, _allInd=trALL)
 
+            #
+            # Method 5: kNN (weighted Minkoski)
+            #
             # get weights
             [v, e] = np.linalg.eig(np.cov(dataX[:,tr]))
             v = np.abs(v)
@@ -122,46 +134,68 @@ for ageGroup in range(0, len(AGE_GROUPS)-1):
                     "w": v/(np.sum(v) + .0000000000000000001)
                 }
             )
-
-            # assign labels
-            indPtr = np.where(study.isActive[tr] == True)  # patients' index
-            indPtr = indPtr[0]
-            Labels = np.zeros((len(tr)))
-            Labels[indPtr] = 1
-
-            #
-            # Method 5: kNN
-            #
-            classifier.fit(np.transpose(dataX[:,tr]), Labels)
+            classifier.fit(np.transpose(dataX[:,tr]), Labels[tr])
 
             # predict & analyze
             Z = classifier.predict(np.transpose(dataX[:,te]))
             (P, R, F1, A) = study.classificationAnalysis(Z.astype(bool), te)
             
             if F1 > bestF1:
-                bestClassifier = classifier
+                bestF1  = F1
+                bestC = classifier
+    bestClassifier = bestClassifier + (copy.deepcopy(bestC),)
 
-                if ageGroup == len(AGE_GROUPS)-2:
-                    #keep the model for the oldest age group
-                    oldestClassifier = classifier
-    
     # validate model
-    Z = bestClassifier.predict(np.transpose(dataX[:,teALL]))
+    Z = bestClassifier[ageGroup].predict(np.transpose(dataX[:,teALL]))
     (P, R, F1, A) = study.classificationAnalysis(Z.astype(bool), teALL)
-    
     print ('|   %7.1f | %7.1f | %13d | %9.2f | %6.2f | %10.2f | %8.2f |' % (AGE_GROUPS[ageGroup], AGE_GROUPS[ageGroup+1], len(ageInd), P, R, F1, A))
 print ('|----------------------------------------------------------------------------------|')
 
-#
-# Check the model fit on oldest group with other age groups
-#
+# Knowledge transfer
+ageGroupModel = len(AGE_GROUPS)-2 # use the one trained in the oldest group
 for ageGroup in range(0, len(AGE_GROUPS)-1):
     # find records in this age group
     ageInd = np.where((ages>=AGE_GROUPS[ageGroup]) * (ages<AGE_GROUPS[ageGroup+1]))
     ageInd = ageInd[0]
 
     # validate model
-    Z = oldestClassifier.predict(np.transpose(dataX[:,ageInd]))
+    Z = bestClassifier[ageGroupModel].predict(np.transpose(dataX[:,ageInd]))
+    (P, R, F1, A) = study.classificationAnalysis(Z.astype(bool), ageInd)
+    print ('|   %7.1f | %7.1f | %13d | %9.2f | %6.2f | %10.2f | %8.2f |' % (AGE_GROUPS[ageGroup], AGE_GROUPS[ageGroup+1], len(ageInd), P, R, F1, A))
+print ('|----------------------------------------------------------------------------------|')
+
+ageGroupModel = 0 # use the one trained in the youngest group
+for ageGroup in range(0, len(AGE_GROUPS)-1):
+    # find records in this age group
+    ageInd = np.where((ages>=AGE_GROUPS[ageGroup]) * (ages<AGE_GROUPS[ageGroup+1]))
+    ageInd = ageInd[0]
+
+    # validate model
+    Z = bestClassifier[ageGroupModel].predict(np.transpose(dataX[:,ageInd]))
+    (P, R, F1, A) = study.classificationAnalysis(Z.astype(bool), ageInd)
+    print ('|   %7.1f | %7.1f | %13d | %9.2f | %6.2f | %10.2f | %8.2f |' % (AGE_GROUPS[ageGroup], AGE_GROUPS[ageGroup+1], len(ageInd), P, R, F1, A))
+print ('|----------------------------------------------------------------------------------|')
+
+ageGroupModel = 1 # use the one trained in the second youngest group
+for ageGroup in range(0, len(AGE_GROUPS)-1):
+    # find records in this age group
+    ageInd = np.where((ages>=AGE_GROUPS[ageGroup]) * (ages<AGE_GROUPS[ageGroup+1]))
+    ageInd = ageInd[0]
+
+    # validate model
+    Z = bestClassifier[ageGroupModel].predict(np.transpose(dataX[:,ageInd]))
+    (P, R, F1, A) = study.classificationAnalysis(Z.astype(bool), ageInd)
+    print ('|   %7.1f | %7.1f | %13d | %9.2f | %6.2f | %10.2f | %8.2f |' % (AGE_GROUPS[ageGroup], AGE_GROUPS[ageGroup+1], len(ageInd), P, R, F1, A))
+print ('|----------------------------------------------------------------------------------|')
+
+ageGroupModel = 2 # use the one trained in the third youngest group
+for ageGroup in range(0, len(AGE_GROUPS)-1):
+    # find records in this age group
+    ageInd = np.where((ages>=AGE_GROUPS[ageGroup]) * (ages<AGE_GROUPS[ageGroup+1]))
+    ageInd = ageInd[0]
+
+    # validate model
+    Z = bestClassifier[ageGroupModel].predict(np.transpose(dataX[:,ageInd]))
     (P, R, F1, A) = study.classificationAnalysis(Z.astype(bool), ageInd)
     print ('|   %7.1f | %7.1f | %13d | %9.2f | %6.2f | %10.2f | %8.2f |' % (AGE_GROUPS[ageGroup], AGE_GROUPS[ageGroup+1], len(ageInd), P, R, F1, A))
 print ('|----------------------------------------------------------------------------------|')

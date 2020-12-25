@@ -276,7 +276,7 @@ class theStudy:
     """
         Method: classificationAnalysis
     """ 
-    def classificationAnalysis(self, _Y, _Ind):
+    def classificationAnalysis(self, _Y, _Ind=None):
         """
             Analyze the classification results.
             Compute:
@@ -286,10 +286,13 @@ class theStudy:
                 Accuracy
 
             _Y: The computed labels - Analyze this classification result (True/False).
-            _Ind: The index of the observation => Y[i] is tested against self.X[_Ind[i]]
+            _Ind: The index of the observation => Y[i] is tested against self.X[_Ind[i]].
+                  If None (default), then use all the items.
 
             RETURN: (P,R,F1,A): Precission, Recall, F1 Measure, Accuracy
         """
+        if _Ind is None:
+            _Ind = list(range(0,_Y.shape[0]))
 
         TP = 0 # True Positive
         TN = 0 # True Negative
