@@ -1,7 +1,7 @@
-.DS_Store
-.gitignore
+./.DS_Store
+./.gitignore
 __pycache__
 results/
 data/
-*.png
-*.eps
+./*.png
+./*.eps
