@@ -6,19 +6,24 @@ import random
 import math
 from sklearn import preprocessing
 
+from sklearn.metrics import precision_recall_curve
+
 class theStudy:
     """
         theStudy class introduces all the data parsing concepts presented in the paper
         
         Class parameters:
-            self.X: Actual respiratory data
-            self.F: Augmented features
+            X: Actual respiratory data
+            F: Augmented features (Labels, Age, Smoking/Non Smoking, etc.)
             
         Supported methods (public):
-            readTable: Get the columns of an excel/csv file
+            readTable: Get the columns of an excel/csv file (data import)
+            writeTable: Save the read records in a csv file  (data export)
             kneeThresholding: Knee thresholding on the covariance matrix - Estimate number of clusters
             prepareCrossValidation: Split the training set in two subsets (random sampling) for cross validation
             classificationAnalysis: Analyse the clasification results (Precission/Recall - F1 Measure)
+            trimData: Trim the specified indices
+            stabilizeSet: Handle unbalanced datasets -> Make all classes have almost equal number of observations
     """
     
     def __init__(self):
@@ -38,10 +43,6 @@ class theStudy:
         self.F = []
         self.isPatient = []
         self.isActive = []
-        self.isNonActive = []
-        self.patientRecs = []
-        self.healthyRecs = []
-    
 
     
     #
@@ -164,7 +165,7 @@ class theStudy:
         #
         # Read the respiratory data
         #
-        X = T[self.MEASUREMENT_START_LINE:250,:].astype(float)
+        X = T[self.MEASUREMENT_START_LINE:,:].astype(float)
 
         if _doFilterData:
             # upper bound filter
@@ -247,6 +248,21 @@ class theStudy:
             dataX = self.X
 
         return (dataX)
+
+    """
+        Method: trimData
+    """ 
+    def trimData(self, _allInd):
+        """
+            Keep the specified records
+
+            _allInd: Data to keep
+        """
+        self.X = self.X[:, _allInd]
+        self.F = self.F[:,_allInd]
+        self.isPatient = self.isPatient[_allInd]
+        self.isActive = self.isActive[_allInd]
+
     """
         Method: prepareCrossValidation
     """ 
@@ -276,7 +292,7 @@ class theStudy:
     """
         Method: classificationAnalysis
     """ 
-    def classificationAnalysis(self, _Y, _Ind=None):
+    def classificationAnalysis(self, _Yobserved, _Ycomputed):
         """
             Analyze the classification results.
             Compute:
@@ -285,28 +301,24 @@ class theStudy:
                 F1 Measure
                 Accuracy
 
-            _Y: The computed labels - Analyze this classification result (True/False).
-            _Ind: The index of the observation => Y[i] is tested against self.X[_Ind[i]].
-                  If None (default), then use all the items.
+            _Yobserved: The observed label (real).
+            _Ycomputed: The computed label (model).
 
             RETURN: (P,R,F1,A): Precission, Recall, F1 Measure, Accuracy
         """
-        if _Ind is None:
-            _Ind = list(range(0,_Y.shape[0]))
-
         TP = 0 # True Positive
         TN = 0 # True Negative
         FP = 0 # False Positive
         FN = 0 # False Negative
 
-        for i in range(0,_Y.shape[0]):
-            if self.isPatient[_Ind[i]] and _Y[i]:
+        for i in range(0,len(_Ycomputed)):
+            if _Yobserved[i] and _Ycomputed[i]:
                 TP = TP + 1
-            elif self.isPatient[_Ind[i]] and not _Y[i]:
+            elif _Yobserved[i] and not _Ycomputed[i]:
                 FN = FN + 1
-            elif not self.isPatient[_Ind[i]] and _Y[i]:
+            elif not _Yobserved[i] and _Ycomputed[i]:
                 FP = FP + 1
-            elif not self.isPatient[_Ind[i]] and not _Y[i]:
+            elif not _Yobserved[i] and not _Ycomputed[i]:
                 TN + TN + 1
 
         R = TP/(TP+FN + .0000000000000000001)
@@ -314,4 +326,31 @@ class theStudy:
         F1 = 2*P*R/((P+R) + .0000000000000000001)
         A = (TP + TN)/(TP + TN + FP + FN + .0000000000000000001)
         
+
+        #(P, R, th) = precision_recall_curve(_Yobserved.astype(int), _Ycomputed.astype(int))
+        #F1 = 2*P*R/((P+R) + .0000000000000000001)
+
         return (P,R,F1, A)
+        
+    """
+        Method: stabilizeSet
+    """ 
+    def stabilizeSet(self, _indP, _indH):
+        """
+            Make all classes have almost same number of observations
+            
+            _indP: Indices of observations of patients
+            _indH: Indices of observations of not patients
+
+            RETURN: The indices (subset of union _indP + _indH) representing observations of the two sets with similar number.
+        """
+        lenH = len(_indH)
+        lenP = len(_indP)
+        if lenH > lenP:
+            random.shuffle(_indH)
+            _indH = _indH[0:int(lenP/3)]
+        else:
+            random.shuffle(_indP)
+            _indP = _indP[0:np.min([lenP, 2*lenH])]
+        #return concatenation
+        return(np.concatenate((_indH, _indP)))
