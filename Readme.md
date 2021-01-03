@@ -6,18 +6,18 @@ This repo includes the puthon code used to study the data and produce the predic
 
 The main analysis is executed in the _theStudy.py_ file, where class `theStudy` is implemented with the following properties and methods:
 
-* *Class parameters:*
-    ** *X*: Actual respiratory data
-    ** *F*: Augmented features (Labels, Age, Smoking/Non Smoking, etc.)
+* **Class parameters:**
+    * **X**: Actual respiratory data
+    * **F**: Augmented features (Labels, Age, Smoking/Non Smoking, etc.)
             
-* *Supported methods (public):*
-    ** *readTable:* Get the columns of an excel/csv file (data import)
-    ** *writeTable:* Save the read records in a csv file (data export)
-    ** *kneeThresholding:* Knee thresholding on the covariance matrix - Estimate number of clusters
-    ** *prepareCrossValidation:* Split the training set in two subsets (random sampling) for cross validation
-    ** *classificationAnalysis:* Analyse the clasification results (Precission/Recall - F1 Measure)
-    ** *trimData:* Trim the specified indices
-    ** *stabilizeSet:* Handle unbalanced datasets -> Make all classes have almost equal number of observations
+* **Supported methods (public):*
+    * *readTable:** Get the columns of an excel/csv file (data import)
+    * **writeTable:** Save the read records in a csv file (data export)
+    * **kneeThresholding:** Knee thresholding on the covariance matrix - Estimate number of clusters
+    * **prepareCrossValidation:** Split the training set in two subsets (random sampling) for cross validation
+    * **classificationAnalysis:** Analyse the clasification results (Precission/Recall - F1 Measure)
+    * **trimData:** Trim the specified indices
+    * **stabilizeSet:** Handle unbalanced datasets -> Make all classes have almost equal number of observations
 
 ## Methods Tested
 
